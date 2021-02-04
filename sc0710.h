@@ -30,7 +30,7 @@
 
 #include "sc0710-reg.h"
 
-#define SC0710_VERSION_CODE KERNEL_VERSION(0, 0, 2)
+#define SC0710_VERSION_CODE KERNEL_VERSION(1, 0, 0)
 
 #define UNSET (-1U)
 
