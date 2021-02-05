@@ -1,3 +1,24 @@
+/*
+ *  Driver for the Elgato 4k60 Pro mk.2 HDMI capture card.
+ *
+ *  Copyright (c) 2021 Steven Toth <stoth@kernellabs.com>
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
 #include "sc0710.h"
 
 MODULE_DESCRIPTION("Driver for SC0710 based TV cards");
@@ -40,6 +61,32 @@ static unsigned int sc0710_devcount;
 static DEFINE_MUTEX(devlist);
 LIST_HEAD(sc0710_devlist);
 
+void sc_andor(struct sc0710_dev *dev, int bar, u32 reg, u32 mask, u32 value)
+{
+	u32 newval = (readl(dev->lmmio[bar]+((reg)>>2)) & ~(mask)) | ((value) & (mask));
+	writel(newval, dev->lmmio[bar]+((reg)>>2));
+}
+
+u32 sc_read(struct sc0710_dev *dev, int bar, u32 reg)
+{
+	return readl(dev->lmmio[bar] + (reg >> 2));
+}
+
+void sc_write(struct sc0710_dev *dev, int bar, u32 reg, u32 value)
+{
+	writel(value, dev->lmmio[bar] + (reg >>2));
+}
+
+void sc_set(struct sc0710_dev *dev, int bar, u32 reg, u32 bit)
+{
+	sc_andor(dev, bar, (reg), (bit), (bit));
+}
+
+void sc_clr(struct sc0710_dev *dev, int bar, u32 reg, u32 bit)
+{
+	sc_andor(dev, bar, (reg), (bit), 0);
+}
+
 static void sc0710_shutdown(struct sc0710_dev *dev)
 {
 	/* Disable all interrupts */
@@ -48,15 +95,21 @@ static void sc0710_shutdown(struct sc0710_dev *dev)
 
 static int get_resources(struct sc0710_dev *dev)
 {
-	if (request_mem_region(pci_resource_start(dev->pci, 0),
-			       pci_resource_len(dev->pci, 0),
-			       dev->name))
-		return 0;
+	if (request_mem_region(pci_resource_start(dev->pci, 0), pci_resource_len(dev->pci, 0), dev->name) == 0)
+	{
+		printk(KERN_ERR "%s: can't get var[0] memory @ 0x%llx\n",
+			dev->name, (unsigned long long)pci_resource_start(dev->pci, 0));
+		return -EBUSY;
+	}
 
-	printk(KERN_ERR "%s: can't get MMIO memory @ 0x%llx\n",
-		dev->name, (unsigned long long)pci_resource_start(dev->pci, 0));
+	if (request_mem_region(pci_resource_start(dev->pci, 1), pci_resource_len(dev->pci, 1), dev->name) == 0)
+	{
+		printk(KERN_ERR "%s: can't get bar[1] memory @ 0x%llx\n",
+			dev->name, (unsigned long long)pci_resource_start(dev->pci, 1));
+		return -EBUSY;
+	}
 
-	return -EBUSY;
+	return 0;
 }
 
 static int sc0710_dev_setup(struct sc0710_dev *dev)
@@ -64,6 +117,7 @@ static int sc0710_dev_setup(struct sc0710_dev *dev)
 	int i;
 
 	mutex_init(&dev->lock);
+	mutex_init(&dev->signalMutex);
 
 	atomic_inc(&dev->refcount);
 
@@ -87,7 +141,7 @@ static int sc0710_dev_setup(struct sc0710_dev *dev)
 	mutex_init(&dev->kthread_lock);
 
 	if (get_resources(dev) < 0) {
-		printk(KERN_ERR "CORE %s No more PCIe resources for "
+		printk(KERN_ERR "%s No more PCIe resources for "
 		       "subsystem: %04x:%04x\n",
 		       dev->name, dev->pci->subsystem_vendor,
 		       dev->pci->subsystem_device);
@@ -97,12 +151,12 @@ static int sc0710_dev_setup(struct sc0710_dev *dev)
 	}
 
 	/* PCIe stuff */
-	dev->lmmio = ioremap(pci_resource_start(dev->pci, 0),
-			     pci_resource_len(dev->pci, 0));
+	dev->lmmio[0] = ioremap(pci_resource_start(dev->pci, 0), pci_resource_len(dev->pci, 0));
+	dev->bmmio[0] = (u8 __iomem *)dev->lmmio[0];
+	dev->lmmio[1] = ioremap(pci_resource_start(dev->pci, 1), pci_resource_len(dev->pci, 1));
+	dev->bmmio[1] = (u8 __iomem *)dev->lmmio[1];
 
-	dev->bmmio = (u8 __iomem *)dev->lmmio;
-
-	printk(KERN_INFO "CORE %s: subsystem: %04x:%04x, board: %s [card=%d,%s]\n",
+	printk(KERN_INFO "%s: subsystem: %04x:%04x, board: %s [card=%d,%s]\n",
 	       dev->name, dev->pci->subsystem_vendor,
 	       dev->pci->subsystem_device, sc0710_boards[dev->board].name,
 	       dev->board, card[dev->nr] == dev->board ?
@@ -113,13 +167,14 @@ static int sc0710_dev_setup(struct sc0710_dev *dev)
 
 static void sc0710_dev_unregister(struct sc0710_dev *dev)
 {
-	release_mem_region(pci_resource_start(dev->pci, 0),
-			   pci_resource_len(dev->pci, 0));
+	release_mem_region(pci_resource_start(dev->pci, 0), pci_resource_len(dev->pci, 0));
+	release_mem_region(pci_resource_start(dev->pci, 1), pci_resource_len(dev->pci, 1));
 
 	if (!atomic_dec_and_test(&dev->refcount))
 		return;
 
-	iounmap(dev->lmmio);
+	iounmap(dev->lmmio[0]);
+	iounmap(dev->lmmio[1]);
 }
 
 static irqreturn_t sc0710_irq(int irq, void *dev_id)
@@ -152,6 +207,29 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 		dev = list_entry(list, struct sc0710_dev, devlist);
 
 		/* Show channel metrics */
+		//sc0710_i2c_hdmi_status_dump(dev);
+		sc0710_i2c_read_hdmi_status(dev);
+		sc0710_i2c_read_status2(dev);
+		sc0710_i2c_read_status3(dev);
+		sc0710_i2c_read_procamp(dev);
+
+		mutex_lock(&dev->signalMutex);
+	        if (dev->locked) {
+			seq_printf(m, "%s    HDMI: %dx%d%c (%dx%d)\n",
+				dev->name,
+				dev->width, dev->height,
+				dev->interlaced ? 'i' : 'p',
+				dev->pixelLineH, dev->pixelLineV);
+		} else {
+			seq_printf(m, "%s    HDMI: no signal\n", dev->name);
+		}
+		mutex_unlock(&dev->signalMutex);
+
+		seq_printf(m, "%s procamp: brightness %d\n", dev->name, dev->brightness);
+		seq_printf(m, "%s procamp: contrast %d\n", dev->name, dev->contrast);
+		seq_printf(m, "%s procamp: saturation %d\n", dev->name, dev->saturation);
+		seq_printf(m, "%s procamp: hue %d\n", dev->name, dev->hue);
+
 	}
 
 	return 0;
@@ -175,7 +253,7 @@ static int sc0710_proc_show(struct seq_file *m, void *v)
 		if (procfs_verbosity & 0x02) {
 			seq_printf(m, "Full PCI Register Dump:\n");
 			for (i = 0; i < 0x100000; i += 4) {
-				val = sc_read(i);
+				val = sc_read(dev, 0, i);
 				if (val) {
 					seq_printf(m, " 0x%04x = %08x\n", i, val);
 				}
@@ -284,11 +362,15 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 	pci_read_config_byte(pci_dev, PCI_CLASS_REVISION, &dev->pci_rev);
 	pci_read_config_byte(pci_dev, PCI_LATENCY_TIMER,  &dev->pci_lat);
 	printk(KERN_INFO "sc0710 device found at %s, rev: %d, irq: %d, "
-		"latency: %d, mmio: 0x%llx [0x%x bytes]\n",
+		"latency: %d\n",
 		pci_name(pci_dev), dev->pci_rev, pci_dev->irq,
-		dev->pci_lat,
+		dev->pci_lat);
+	printk(KERN_INFO "sc0710 bar[0]: 0x%llx [0x%x bytes]\n",
 		(unsigned long long)pci_resource_start(pci_dev, 0),
 		(unsigned int)pci_resource_len(pci_dev, 0));
+	printk(KERN_INFO "sc0710 bar[1]: 0x%llx [0x%x bytes]\n",
+		(unsigned long long)pci_resource_start(pci_dev, 1),
+		(unsigned int)pci_resource_len(pci_dev, 1));
 
 	pci_set_master(pci_dev);
 	if (!pci_dma_supported(pci_dev, 0xffffffff)) {
@@ -366,7 +448,7 @@ static void sc0710_finidev(struct pci_dev *pci_dev)
 	}
 
 	sc0710_shutdown(dev);
-	
+
 	pci_disable_device(pci_dev);
 
 	/* unregister stuff */
@@ -428,6 +510,7 @@ static void __exit sc0710_fini(void)
 	remove_proc_entry("sc0710-state", NULL);
 #endif
 	pci_unregister_driver(&sc0710_pci_driver);
+	printk(KERN_INFO "sc0710 driver unloaded\n");
 }
 
 module_init(sc0710_init);

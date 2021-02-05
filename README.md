@@ -7,6 +7,26 @@ Elgato 4k60 card to the linux platform.
 The primary development platform for the project is Centos 7.5.1804 (Core), although
 the driver is expected to work on multiple distributions.
 
+# License
+Driver for the Elgato 4k60 Pro mk.2 HDMI capture card.
+
+Copyright (c) 2021 Steven Toth <stoth@kernellabs.com>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
 # Background
 Most of the investigation work is being done on Windows 10.
 I'm instrumenting the hardware with debug wiring, identifying common
@@ -42,6 +62,4 @@ Email: stoth@kernellabs.com
 * Docs - Daily journal, random notes.
 * Traces - Various dump files taken from analyzers.
 * Pics - Interesting or curious pictures I've taken during the process.
-
-
 

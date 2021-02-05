@@ -1,9 +1,22 @@
 /*
- * Copyright 2020 - Kernel Labs Inc. www.kernellabs.com.
- * 
- * The entire content of this file is considered proprietary, confidential
- * and closed source by Kernel Labs Inc.
- * 
+ *  Driver for the Elgato 4k60 Pro mk.2 HDMI capture card.
+ *
+ *  Copyright (c) 2021 Steven Toth <stoth@kernellabs.com>
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/init.h>
@@ -54,6 +67,17 @@ struct sc0710_subid {
 	u32     card;
 };
 
+struct sc0710_dev;
+
+struct sc0710_i2c {
+	int nr;
+	struct sc0710_dev *dev;
+
+	struct i2c_adapter         i2c_adap;
+	struct i2c_client          i2c_client;
+	u32                        i2c_rc;
+};
+
 struct sc0710_dev {
 	struct list_head devlist;
 
@@ -68,35 +92,32 @@ struct sc0710_dev {
 	/* pci stuff */
 	struct pci_dev             *pci;
 	unsigned char              pci_rev, pci_lat;
-	u32                        __iomem *lmmio;
-	u8                         __iomem *bmmio;
+	u32                        __iomem *lmmio[2];
+	u8                         __iomem *bmmio[2];
 
 	/* A kernel thread to keep the HDMI video frontend alive. */
- 	struct task_struct	*kthread;
-	struct mutex 		kthread_lock;
+ 	struct task_struct         *kthread;
+	struct mutex               kthread_lock;
 
+	/* Misc structs */
+	struct sc0710_i2c          i2cbus[1];
+
+	/* Signal format. Its not value to check anything without taking
+	 * the mutex.
+	 */
+	struct mutex               signalMutex;
+	u32                        locked;
+	u32                        pixelLineH, pixelLineV; /* HDMI line format */
+	u32                        width, height;    /* Actual display */
+	u32                        interlaced;
+
+	/* Procamp */
+	s32                        brightness;
+	s32                        contrast;
+	s32                        saturation;
+	s32                        hue;
 };
 
-/* ----------------------------------------------------------- */
-
-#define sc_read(reg)             readl(dev->lmmio + ((reg)>>2))
-#define sc_write(reg, value)     { writel((value), dev->lmmio + ((reg)>>2)); /* printk(KERN_ERR "w:%x(%x)\n", reg, value ); */ } 
-
-#if 0
-#define tm_andor(reg, mask, value) \
-  writel((readl(dev->lmmio+((reg)>>2)) & ~(mask)) |\
-  ((value) & (mask)), dev->lmmio+((reg)>>2)) ; /* printk(KERN_ERR "ao:%x(%x, %x) %x\n", reg, value, mask, readl(dev->lmmio+((reg)>>2))) */
-#else
-#define sc_andor(reg, mask, value)\
-{\
-	u32 newval = (readl(dev->lmmio+((reg)>>2)) & ~(mask)) | ((value) & (mask));\
-	writel(newval, dev->lmmio+((reg)>>2));\
-/*	printk(KERN_ERR "ao:%x(%x)\n", reg, newval); */\
-}
-#endif
-
-#define sc_set(reg, bit)          sc_andor((reg), (bit), (bit))
-#define sc_clear(reg, bit)        sc_andor((reg), (bit), 0)
 
 /* ----------------------------------------------------------- */
 /* sc0710-core.c                                              */
@@ -112,3 +133,16 @@ extern const unsigned int sc0710_idcount;
 extern void sc0710_card_list(struct sc0710_dev *dev);
 extern void sc0710_gpio_setup(struct sc0710_dev *dev);
 extern void sc0710_card_setup(struct sc0710_dev *dev);
+
+u32  sc_read(struct sc0710_dev *dev, int bar, u32 reg);
+void sc_write(struct sc0710_dev *dev, int bar, u32 reg, u32 value);
+void sc_set(struct sc0710_dev *dev, int bar, u32 reg, u32 bit);
+void sc_clr(struct sc0710_dev *dev, int bar, u32 reg, u32 bit);
+
+/* -i2c.c */
+int sc0710_i2c_hdmi_status_dump(struct sc0710_dev *dev);
+int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev);
+int sc0710_i2c_read_status2(struct sc0710_dev *dev);
+int sc0710_i2c_read_status3(struct sc0710_dev *dev);
+int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
+

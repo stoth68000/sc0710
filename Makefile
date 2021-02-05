@@ -1,9 +1,9 @@
 sc0710-objs := \
-	sc0710-cards.o sc0710-core.o \
+	sc0710-cards.o sc0710-core.o sc0710-i2c.o
 
 obj-m += sc0710.o
 
-TARFILES = Makefile *.h *.c
+TARFILES = Makefile *.h *.c *.txt *.md
 
 KVERSION = $(shell uname -r)
 all:
