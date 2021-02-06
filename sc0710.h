@@ -45,6 +45,9 @@
 
 #define SC0710_VERSION_CODE KERNEL_VERSION(1, 0, 0)
 
+#define SC0710_MAX_CHANNELS 2
+#define SC0710_MAX_CHANNEL_DESCRIPTORS 8
+
 #define UNSET (-1U)
 
 #define SC0710_MAXBOARDS 8
@@ -68,6 +71,60 @@ struct sc0710_subid {
 };
 
 struct sc0710_dev;
+
+struct sc0710_dma_descriptor
+{
+	u32 control;
+	u32 lengthBytes;
+	u32 src_l;
+	u32 src_h;
+	u32 dst_l;
+	u32 dst_h;
+	u32 next_l;
+	u32 next_h;
+} __packed;
+
+enum sc0710_channel_dir_e
+{
+	CHDIR_INPUT,
+	CHDIR_OUTPUT,
+};
+
+enum sc0710_channel_type_e
+{
+	CHTYPE_VIDEO,
+	CHTYPE_AUDIO,
+};
+
+struct sc0710_dma_channel
+{
+	struct sc0710_dev           *dev;
+        u32                          nr;
+	u32                          enabled;
+	enum sc0710_channel_dir_e    direction;
+	enum sc0710_channel_type_e   mediatype;
+
+	struct mutex                 lock;
+	u32                          numDescriptors;
+	struct sc0710_dma_descriptor descs[SC0710_MAX_CHANNEL_DESCRIPTORS];
+
+	/* PCI BAR addresses */
+	u32                          register_dma_base;
+	u32                          register_sg_base;
+	u32                          reg_sg_start_l;
+	u32                          reg_sg_start_h;
+	u32                          reg_sg_adj;
+
+	/* A single page hold the entire descriptor list for a channel. */
+	u32                          pt_size; /* PCI allocation size in bytes */
+	u64                         *pt_cpu;  /* Virtual address */
+	dma_addr_t                   pt_dma;  /* Physical address - accessible to the PCIe endpoint */
+
+	/* A single large allocation holds an entire video frame, or audio buffer. */
+	u32                          buf_size; /* PCI allocation size in bytes */
+	u64                         *buf_cpu[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Virtual address */
+	dma_addr_t                   buf_dma[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Physical address - accessible to the PCIe endpoint */
+};
 
 struct sc0710_i2c {
 	int nr;
@@ -115,6 +172,9 @@ struct sc0710_dev {
 	/* Misc structs */
 	struct sc0710_i2c          i2cbus[1];
 
+	/* Anything channel related. */
+	struct sc0710_dma_channel  channel[SC0710_MAX_CHANNELS];
+
 	/* Signal format. Its not value to check anything without taking
 	 * the mutex.
 	 */
@@ -161,3 +221,11 @@ int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
 
 /* -video.c */
 const struct sc0710_format_s *sc0710_format_find_by_timing(u32 timingH, u32 timingV);
+
+/* -dma-channel.c */
+int  sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction, u32 baseaddr,
+	enum sc0710_channel_type_e mediatype);
+
+void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr);
+void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch);
+

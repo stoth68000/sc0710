@@ -1,6 +1,6 @@
 sc0710-objs := \
 	sc0710-cards.o sc0710-core.o sc0710-i2c.o \
-	sc0710-formats.o
+	sc0710-formats.o sc0710-dma-channel.o
 
 obj-m += sc0710.o
 

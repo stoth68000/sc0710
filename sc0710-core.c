@@ -173,6 +173,9 @@ static void sc0710_dev_unregister(struct sc0710_dev *dev)
 	if (!atomic_dec_and_test(&dev->refcount))
 		return;
 
+	sc0710_dma_channel_free(dev, 0);
+	sc0710_dma_channel_free(dev, 1);
+
 	iounmap(dev->lmmio[0]);
 	iounmap(dev->lmmio[1]);
 }
@@ -400,15 +403,15 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 		goto fail_irq;
 	}
 
-	/* OK, let's bring the subsystems into life */
-	msleep(20);
-
 	/* Card specific tweaks with subsystems etc */
 	sc0710_card_setup(dev);
 
 	pci_set_drvdata(pci_dev, dev);
 
 	printk(KERN_INFO "sc0710 device at %s\n", pci_name(pci_dev));
+
+	sc0710_dma_channel_alloc(dev, 0, CHDIR_INPUT, 0x1000, CHTYPE_VIDEO);
+	sc0710_dma_channel_alloc(dev, 1, CHDIR_INPUT, 0x1100, CHTYPE_AUDIO);
 
 	/* Put this in a global list so we can track multiple boards */
 	mutex_lock(&devlist);
