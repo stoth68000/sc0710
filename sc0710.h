@@ -78,6 +78,19 @@ struct sc0710_i2c {
 	u32                        i2c_rc;
 };
 
+struct sc0710_format_s
+{
+	u32   timingH;
+	u32   timingV;
+	u32   width;
+	u32   height;
+	u32   interlaced;
+	u32   fpsX100;
+	u32   fpsnum;
+	u32   fpsden;
+	char *name;
+};
+
 struct sc0710_dev {
 	struct list_head devlist;
 
@@ -146,3 +159,5 @@ int sc0710_i2c_read_status2(struct sc0710_dev *dev);
 int sc0710_i2c_read_status3(struct sc0710_dev *dev);
 int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
 
+/* -video.c */
+const struct sc0710_format_s *sc0710_format_find_by_timing(u32 timingH, u32 timingV);
