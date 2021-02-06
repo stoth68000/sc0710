@@ -229,7 +229,7 @@ static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf
 	cnt = 0;
 	while (cnt < i2c_readlen) {
 		*(rbuf + cnt) = busread(dev);
-		//printk("dat[0x%02x] %02x\n", cnt, dat[cnt]); 
+		//printk("dat[0x%02x] %02x\n", cnt, *(rbuf + cnt)); 
 		cnt++;
 	}
 	v = sc_read(dev, 0, BAR0_3104);
@@ -247,11 +247,17 @@ static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf
 int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 {
 	int ret;
+	int i;
 	u8 wbuf[1]    = { 0x00 /* Subaddress */ };
 	u8 rbuf[0x1a] = { 0    /* response buffer */};
 
 	ret = sc0710_i2c_writeread(dev, I2C_DEV__ARM_MCU, &wbuf[0], sizeof(wbuf), &rbuf[0], sizeof(rbuf));
 	printk("%s ret = %d\n", __func__, ret);
+
+	printk("%s    hdmi: ", dev->name);
+	for (i = 0; i < sizeof(rbuf); i++)
+		printk("%02x ", rbuf[i]);
+	printk("\n");
 
 	if (rbuf[8]) {
 		dev->locked = 1;
