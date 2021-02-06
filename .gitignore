@@ -1,0 +1,8 @@
+Module.symvers
+modules.order
+sc0710.ko
+sc0710.mod.c
+.sc0710.ko.cmd
+*.o
+*.o.cmd
+.tmp_versions/
