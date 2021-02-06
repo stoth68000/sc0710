@@ -38,7 +38,7 @@ void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch)
 	int i;
 	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
 
-	printk("%s pt_cpu %p pt_dma %llx pt_size %d\n",
+	printk("%s  pt_cpu %p  pt_dma %llx  pt_size %d\n",
 		ch->dev->name,
 		ch->pt_cpu, ch->pt_dma, ch->pt_size);
 
@@ -49,7 +49,9 @@ void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch)
 		printk("%s buf_cpu %p buf_dma %llx buf_size %d\n",
 			ch->dev->name,
 			ch->buf_cpu[i], ch->buf_dma[i], ch->buf_size);
-		printk("%s [%02d] %08x %08x %08x %08x %08x %08x %08x %08x\n",
+	}
+	for (i = 0; i < ch->numDescriptors; i++) {
+		printk("%s         [%02d] %08x %08x %08x %08x %08x %08x %08x %08x\n",
 			ch->dev->name,
 			i,
 			desc->control,
