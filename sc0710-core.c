@@ -44,6 +44,10 @@ unsigned int thread_poll_interval = 100;
 module_param(thread_poll_interval, int, 0644);
 MODULE_PARM_DESC(thread_poll_interval, "have the kernel thread poll every N ms (def:100)");
 
+unsigned int thread_dma_poll_interval_ms = 2;
+module_param(thread_dma_poll_interval_ms, int, 0644);
+MODULE_PARM_DESC(thread_dma_poll_interval_ms, "have the kernel thread poll dma every N ms (def:2)");
+
 static unsigned int debug;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "enable debug messages");
@@ -316,6 +320,7 @@ static int sc0710_proc_create(void)
 static int sc0710_thread_dma_function(void *data)
 {
 	struct sc0710_dev *dev = data;
+	int ret, i;
 
 	dprintk(1, "%s() Started\n", __func__);
 
@@ -324,7 +329,7 @@ static int sc0710_thread_dma_function(void *data)
 	set_freezable();
 
 	while (1) {
-		msleep_interruptible(thread_poll_interval);
+		msleep_interruptible(thread_dma_poll_interval_ms);
 
 		if (kthread_should_stop())
 			break;
@@ -333,6 +338,7 @@ static int sc0710_thread_dma_function(void *data)
 
 		if (thread_dma_active == 0)
 			continue;
+
 		/* Other parts of the driver need to guarantee that
 		 * various 'keep alives' aren't happening. We'll
 		 * prevent race conditions by allowing the
@@ -342,6 +348,10 @@ static int sc0710_thread_dma_function(void *data)
 		mutex_lock(&dev->kthread_dma_lock);
 
 		mutex_unlock(&dev->kthread_dma_lock);
+
+		for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
+			ret = sc0710_dma_channel_service(&dev->channel[i]);
+		}
 	}
 
 	thread_dma_active = 0;

@@ -33,6 +33,63 @@
 
 #include "sc0710.h"
 
+/* We're not doing IRQ and interrupt servicing of the dma subsystem, instead
+ * we're going to rely on a 2ms kernel thread to poll and dequeue
+ * buffers.
+ * This matches the windows driver design, and after review the industry
+ * (xilinx) believe that a looping descriptor set that needs no servicing
+ * keeps the DMA buss 100% busy, all the time. Where as, waiting for an
+ * interrupt to services the DMA system (which its stopped) introduces
+ * unwanted latency.
+ *
+ * The basic design is, every 2ms this function is called.
+ * We'll read the DMA controller count register for this channel,
+ * if its changed since the last time we read - then another descriptor
+ * has completed. Upon descriptor completion, we'll look up which descriptor
+ * has changed, and copy the data out of the descriptor buffer BEFORE
+ * the dma subsystem has chance to ovewrite it.
+ * Each channel has N descriptors, a minimum of four. So, out latency is
+ * the counter changes, we notice 2ms later, we spend micro seconds
+ * looking at each descriptor in turn (N - typically 6), when we detect
+ * that its changed, we'll immediately memcpy the dma dest buffer
+ * into a previously allocated user facing buffer.
+ * 
+ * Return < 0 on error
+ * Return number of buffers we copyinto from dma into user buffers.
+ */
+int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
+{
+	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
+	int i, processed = 0;
+	u32 v, ctrl;
+
+	if (ch->enabled == 0)
+		return -1;
+
+	v = sc_read(ch->dev, 1, ch->reg_dma_completed_descriptor_count);
+	if (v == ch->dma_completed_descriptor_count_last) {
+		/* No new buffers since our last service call. */
+		return processed;
+	}
+
+	ch->dma_completed_descriptor_count_last = v;
+
+	/* Check all the descriptors and see which on finished. */
+	for (i = 0; i < ch->numDescriptors; i++) {
+		ctrl = desc->control;
+#if 0
+		if (ctrl & something)
+		{
+			dequeue this descriptor
+		}
+		desc->controlreset, re-enable the descriptor
+#endif
+		desc++;
+	}
+
+	return processed;
+}
+
 void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch)
 {
 	int i;
@@ -146,8 +203,12 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	ch->pt_size = PAGE_SIZE;
 
 	/* register offsets use by the channel and dma descriptor register writes/reads. */
-	ch->register_dma_base = baseaddr;
 
+	/* DMA controller */
+	ch->register_dma_base = baseaddr;
+	ch->reg_dma_completed_descriptor_count = ch->register_dma_base + 0x44;
+
+	/* SGDMA Controller */
 	ch->register_sg_base = baseaddr + 0x4000;
         ch->reg_sg_start_l = ch->register_sg_base + 0x80;
         ch->reg_sg_start_h = ch->register_sg_base + 0x84;

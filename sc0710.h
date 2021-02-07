@@ -108,8 +108,11 @@ struct sc0710_dma_channel
 	u32                          numDescriptors;
 	struct sc0710_dma_descriptor descs[SC0710_MAX_CHANNEL_DESCRIPTORS];
 
-	/* PCI BAR addresses */
+	/* DMA Controller PCI BAR offsets */
 	u32                          register_dma_base;
+	u32                          reg_dma_completed_descriptor_count;
+
+	/* SGDMA Channel PCI BAR offsets */
 	u32                          register_sg_base;
 	u32                          reg_sg_start_l;
 	u32                          reg_sg_start_h;
@@ -124,6 +127,9 @@ struct sc0710_dma_channel
 	u32                          buf_size; /* PCI allocation size in bytes */
 	u64                         *buf_cpu[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Virtual address */
 	dma_addr_t                   buf_dma[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Physical address - accessible to the PCIe endpoint */
+
+	/* DMA related items we need to track. */
+	u32                          dma_completed_descriptor_count_last;
 };
 
 struct sc0710_i2c {
@@ -234,4 +240,5 @@ int  sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channe
 
 void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr);
 void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch);
+int  sc0710_dma_channel_service(struct sc0710_dma_channel *ch);
 
