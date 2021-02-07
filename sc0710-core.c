@@ -182,8 +182,7 @@ static void sc0710_dev_unregister(struct sc0710_dev *dev)
 	if (!atomic_dec_and_test(&dev->refcount))
 		return;
 
-	sc0710_dma_channel_free(dev, 0);
-	sc0710_dma_channel_free(dev, 1);
+	sc0710_dma_channels_free(dev);
 
 	iounmap(dev->lmmio[0]);
 	iounmap(dev->lmmio[1]);
@@ -320,7 +319,7 @@ static int sc0710_proc_create(void)
 static int sc0710_thread_dma_function(void *data)
 {
 	struct sc0710_dev *dev = data;
-	int ret, i;
+	int ret;
 
 	dprintk(1, "%s() Started\n", __func__);
 
@@ -349,9 +348,7 @@ static int sc0710_thread_dma_function(void *data)
 
 		mutex_unlock(&dev->kthread_dma_lock);
 
-		for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
-			ret = sc0710_dma_channel_service(&dev->channel[i]);
-		}
+		ret = sc0710_dma_channels_service(dev);
 	}
 
 	thread_dma_active = 0;
@@ -461,8 +458,7 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 
 	printk(KERN_INFO "sc0710 device at %s\n", pci_name(pci_dev));
 
-	sc0710_dma_channel_alloc(dev, 0, CHDIR_INPUT, 0x1000, CHTYPE_VIDEO);
-	sc0710_dma_channel_alloc(dev, 1, CHDIR_INPUT, 0x1100, CHTYPE_AUDIO);
+	sc0710_dma_channels_alloc(dev);
 
 	/* Put this in a global list so we can track multiple boards */
 	mutex_lock(&devlist);

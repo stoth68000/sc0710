@@ -242,3 +242,10 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr);
 void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_service(struct sc0710_dma_channel *ch);
 
+/* --dma-channels.c */
+int  sc0710_dma_channels_alloc(struct sc0710_dev *dev);
+void sc0710_dma_channels_free(struct sc0710_dev *dev);
+int  sc0710_dma_channels_start(struct sc0710_dev *dev);
+int  sc0710_dma_channels_service(struct sc0710_dev *dev);
+void sc0710_dma_channels_stop(struct sc0710_dev *dev);
+

@@ -77,6 +77,11 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 	/* Check all the descriptors and see which on finished. */
 	for (i = 0; i < ch->numDescriptors; i++) {
 		ctrl = desc->control;
+
+		printk("%s         [%02d] %08x\n",
+			ch->dev->name,
+			i,
+			desc->control);
 #if 0
 		if (ctrl & something)
 		{
