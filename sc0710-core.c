@@ -32,9 +32,13 @@ unsigned int procfs_verbosity = 3;
 module_param(procfs_verbosity, int, 0644);
 MODULE_PARM_DESC(procfs_verbosity, "enable procfs debugging via /proc/sc0710");
 
-unsigned int thread_active = 1;
-module_param(thread_active, int, 0644);
-MODULE_PARM_DESC(thread_active, "should keep alive thread run");
+unsigned int thread_hdmi_active = 1;
+module_param(thread_hdmi_active, int, 0644);
+MODULE_PARM_DESC(thread_hdmi_active, "should HDMI thread run");
+
+unsigned int thread_dma_active = 1;
+module_param(thread_dma_active, int, 0644);
+MODULE_PARM_DESC(thread_dma_active, "should dma thread run");
 
 unsigned int thread_poll_interval = 100;
 module_param(thread_poll_interval, int, 0644);
@@ -138,7 +142,8 @@ static int sc0710_dev_setup(struct sc0710_dev *dev)
 	}
 
 	/* The keepalive thread needs a mutex */
-	mutex_init(&dev->kthread_lock);
+	mutex_init(&dev->kthread_hdmi_lock);
+	mutex_init(&dev->kthread_dma_lock);
 
 	if (get_resources(dev) < 0) {
 		printk(KERN_ERR "%s No more PCIe resources for "
@@ -308,7 +313,7 @@ static int sc0710_proc_create(void)
 }
 #endif
 
-static int sc0710_thread_function(void *data)
+static int sc0710_thread_dma_function(void *data)
 {
 	struct sc0710_dev *dev = data;
 
@@ -326,7 +331,7 @@ static int sc0710_thread_function(void *data)
 
 		try_to_freeze();
 
-		if (thread_active == 0)
+		if (thread_dma_active == 0)
 			continue;
 		/* Other parts of the driver need to guarantee that
 		 * various 'keep alives' aren't happening. We'll
@@ -334,12 +339,48 @@ static int sc0710_thread_function(void *data)
 		 * rest of the driver to dictate when
 		 * this keepalives can occur.
 		 */
-		mutex_lock(&dev->kthread_lock);
+		mutex_lock(&dev->kthread_dma_lock);
 
-		mutex_unlock(&dev->kthread_lock);
+		mutex_unlock(&dev->kthread_dma_lock);
 	}
 
-	thread_active = 0;
+	thread_dma_active = 0;
+	dprintk(1, "%s() Stopped\n", __func__);
+	return 0;
+}
+
+static int sc0710_thread_hdmi_function(void *data)
+{
+	struct sc0710_dev *dev = data;
+
+	dprintk(1, "%s() Started\n", __func__);
+
+	msleep(2000);
+
+	set_freezable();
+
+	while (1) {
+		msleep_interruptible(thread_poll_interval);
+
+		if (kthread_should_stop())
+			break;
+
+		try_to_freeze();
+
+		if (thread_hdmi_active == 0)
+			continue;
+		/* Other parts of the driver need to guarantee that
+		 * various 'keep alives' aren't happening. We'll
+		 * prevent race conditions by allowing the
+		 * rest of the driver to dictate when
+		 * this keepalives can occur.
+		 */
+		mutex_lock(&dev->kthread_hdmi_lock);
+
+		mutex_unlock(&dev->kthread_hdmi_lock);
+	}
+
+	thread_hdmi_active = 0;
 	dprintk(1, "%s() Stopped\n", __func__);
 	return 0;
 }
@@ -418,12 +459,19 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 	list_add_tail(&dev->devlist, &sc0710_devlist);
 	mutex_unlock(&devlist);
 
-	dev->kthread = kthread_run(sc0710_thread_function, dev, "sc0710 hdmi");
-	if (!dev->kthread) {
+	dev->kthread_hdmi = kthread_run(sc0710_thread_hdmi_function, dev, "sc0710 hdmi");
+	if (!dev->kthread_hdmi) {
 		printk(KERN_ERR "%s() Failed to create "
 			"hdmi kernel thread\n", __func__);
 	} else
 		dprintk(1, "%s() Created the HDMI thread\n", __func__);
+
+	dev->kthread_dma = kthread_run(sc0710_thread_dma_function, dev, "sc0710 dma");
+	if (!dev->kthread_dma) {
+		printk(KERN_ERR "%s() Failed to create "
+			"dma kernel thread\n", __func__);
+	} else
+		dprintk(1, "%s() Created the DMA thread\n", __func__);
 
 	return 0;
 
@@ -439,11 +487,22 @@ static void sc0710_finidev(struct pci_dev *pci_dev)
 	struct sc0710_dev *dev = pci_get_drvdata(pci_dev);
 	int i = 0;
 
-	if (dev->kthread) {
-		kthread_stop(dev->kthread);
-		dev->kthread = NULL;
+	if (dev->kthread_dma) {
+		kthread_stop(dev->kthread_dma);
+		dev->kthread_dma = NULL;
 
-		while (thread_active) {
+		while (thread_dma_active) {
+			msleep(5);
+			if (i++ > 3)
+				break;
+		}
+	}
+
+	if (dev->kthread_hdmi) {
+		kthread_stop(dev->kthread_hdmi);
+		dev->kthread_hdmi = NULL;
+
+		while (thread_hdmi_active) {
 			msleep(500);
 			if (i++ > 8)
 				break;

@@ -166,8 +166,14 @@ struct sc0710_dev {
 	u8                         __iomem *bmmio[2];
 
 	/* A kernel thread to keep the HDMI video frontend alive. */
- 	struct task_struct         *kthread;
-	struct mutex               kthread_lock;
+ 	struct task_struct         *kthread_hdmi;
+	struct mutex               kthread_hdmi_lock;
+
+	/* A kernel thread that checks the dma descriptors
+	 * instead of relying on highly latent interrupts.
+	 */
+ 	struct task_struct         *kthread_dma;
+	struct mutex               kthread_dma_lock;
 
 	/* Misc structs */
 	struct sc0710_i2c          i2cbus[1];
