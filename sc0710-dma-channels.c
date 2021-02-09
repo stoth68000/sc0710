@@ -27,8 +27,12 @@
 
 int sc0710_dma_channels_alloc(struct sc0710_dev *dev)
 {
-	sc0710_dma_channel_alloc(dev, 0, CHDIR_INPUT, 0x1000, CHTYPE_VIDEO);
-	sc0710_dma_channel_alloc(dev, 1, CHDIR_INPUT, 0x1100, CHTYPE_AUDIO);
+	switch (dev->board) {
+	case SC0710_BOARD_ELGATEO_4KP60_MK2:
+		sc0710_dma_channel_alloc(dev, 0, CHDIR_INPUT, 0x1000, CHTYPE_VIDEO);
+		sc0710_dma_channel_alloc(dev, 1, CHDIR_INPUT, 0x1100, CHTYPE_AUDIO);
+		break;
+	}
 
 	return 0;
 }
