@@ -81,36 +81,7 @@ void sc0710_card_setup(struct sc0710_dev *dev)
 {
 	switch (dev->board) {
 	case SC0710_BOARD_ELGATEO_4KP60_MK2:
-#if 0
-		printk("configuring regs\n");
-		v = sc_read(dev, 0, BAR0_2000); printk("2000 = %08x\n", v);
-		v = sc_read(dev, 0, BAR0_3000); printk("3000 = %08x\n", v);
-#endif
-
 		sc_write(dev, 0, BAR0_00C4, 0x000f0000);
-
-#if 0
-		v = sc_read(dev, 1, BAR1_2000); printk("2000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_3000); printk("3000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_0000); printk("0000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_4000); printk("4000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_0100); printk("0100 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_4100); printk("4100 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_0200); printk("0200 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_4200); printk("4200 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_0300); printk("0300 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_4300); printk("4300 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_1000); printk("1000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_5000); printk("5000 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_1100); printk("1100 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_5100); printk("5100 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_1200); printk("1200 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_5200); printk("5200 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_1300); printk("1300 = %08x\n", v);
-		v = sc_read(dev, 1, BAR1_5300); printk("5300 = %08x\n", v);
-		v = sc_read(dev, 0, BAR0_0008); printk("0008 = %08x\n", v);
-#endif
-
 		sc_write(dev, 1, BAR1_0094, 0x00fffe3e);
 		sc_write(dev, 1, BAR1_0008, 0x00fffe3e);
 		sc_write(dev, 1, BAR1_0194, 0x00fffe3e);
