@@ -72,6 +72,13 @@ struct sc0710_subid {
 
 struct sc0710_dev;
 
+struct sc0710_things_per_second
+{
+	struct timespec lastTime;
+	u64 persecond;
+	u64 accumulator;
+};
+
 struct sc0710_dma_descriptor
 {
 	u32 control;
@@ -111,12 +118,20 @@ struct sc0710_dma_channel
 	/* DMA Controller PCI BAR offsets */
 	u32                          register_dma_base;
 	u32                          reg_dma_completed_descriptor_count;
+	u32                          reg_dma_control;
+	u32                          reg_dma_control_w1s;
+	u32                          reg_dma_control_w1c;
+	u32                          reg_dma_status1;
+	u32                          reg_dma_status2;
+	u32                          reg_dma_poll_wba_l;
+	u32                          reg_dma_poll_wba_h;
 
 	/* SGDMA Channel PCI BAR offsets */
 	u32                          register_sg_base;
 	u32                          reg_sg_start_l;
 	u32                          reg_sg_start_h;
 	u32                          reg_sg_adj;
+	u32                          reg_sg_credits;
 
 	/* A single page hold the entire descriptor list for a channel. */
 	u32                          pt_size; /* PCI allocation size in bytes */
@@ -130,6 +145,10 @@ struct sc0710_dma_channel
 
 	/* DMA related items we need to track. */
 	u32                          dma_completed_descriptor_count_last;
+
+	/* Statistics */
+	struct sc0710_things_per_second bitsPerSecond;
+	struct sc0710_things_per_second descPerSecond;
 };
 
 struct sc0710_i2c {
@@ -241,6 +260,9 @@ int  sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channe
 void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr);
 void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_service(struct sc0710_dma_channel *ch);
+int  sc0710_dma_channel_start_prep(struct sc0710_dma_channel *ch);
+int  sc0710_dma_channel_start(struct sc0710_dma_channel *ch);
+int  sc0710_dma_channel_stop(struct sc0710_dma_channel *ch);
 
 /* --dma-channels.c */
 int  sc0710_dma_channels_alloc(struct sc0710_dev *dev);
@@ -248,4 +270,9 @@ void sc0710_dma_channels_free(struct sc0710_dev *dev);
 int  sc0710_dma_channels_start(struct sc0710_dev *dev);
 int  sc0710_dma_channels_service(struct sc0710_dev *dev);
 void sc0710_dma_channels_stop(struct sc0710_dev *dev);
+
+/* things-per-second.c */
+void sc0710_things_per_second_reset(struct sc0710_things_per_second *tps);
+void sc0710_things_per_second_update(struct sc0710_things_per_second *tps, s64 value);
+s64  sc0710_things_per_second_query(struct sc0710_things_per_second *tps);
 

@@ -44,10 +44,43 @@ void sc0710_dma_channels_free(struct sc0710_dev *dev)
 
 void sc0710_dma_channels_stop(struct sc0710_dev *dev)
 {
+	int i, ret;
+
+	printk("%s()\n", __func__);
+
+	sc_clr(dev, 0, BAR0_00D0, 0x0001);
+
+	for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
+		ret = sc0710_dma_channel_stop(&dev->channel[i]);
+	}
 }
 
 int sc0710_dma_channels_start(struct sc0710_dev *dev)
 {
+	int i, ret;
+
+	printk("%s()\n", __func__);
+
+	for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
+		ret = sc0710_dma_channel_start_prep(&dev->channel[i]);
+	}
+
+	/* TODO: What do these registers do? Any documentation? */
+	//sc_write(dev, 0, BAR0_00C8, 0x438);
+	sc_write(dev, 0, BAR0_00C8, 0x200);
+	//sc_write(dev, 0, BAR0_00C8, 0x200);
+	sc_write(dev, 0, BAR0_00D0, 0x4100);
+	sc_write(dev, 0, 0xcc, 0);
+	sc_write(dev, 0, 0xdc, 0);
+	sc_write(dev, 0, BAR0_00D0, 0x4300);
+	sc_write(dev, 0, BAR0_00D0, 0x4100);
+
+	for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
+		ret = sc0710_dma_channel_start(&dev->channel[i]);
+	}
+
+	sc_set(dev, 0, BAR0_00D0, 0x0001);
+
 	return 0;
 }
 

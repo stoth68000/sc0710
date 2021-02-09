@@ -1,6 +1,7 @@
 sc0710-objs := \
 	sc0710-cards.o sc0710-core.o sc0710-i2c.o \
-	sc0710-formats.o sc0710-dma-channel.o sc0710-dma-channels.o
+	sc0710-formats.o sc0710-dma-channel.o sc0710-dma-channels.o \
+	sc0710-things-per-second.o
 
 obj-m += sc0710.o
 
@@ -16,7 +17,8 @@ load:	all
 	sudo dmesg -c >/dev/null
 	sudo cp /dev/null /var/log/debug
 	sudo insmod ./sc0710.ko \
-		thread_dma_poll_interval_ms=5000
+		thread_dma_poll_interval_ms=2 \
+		dma_status=0
 
 unload:
 	sudo rmmod sc0710

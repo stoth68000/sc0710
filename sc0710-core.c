@@ -48,6 +48,10 @@ unsigned int thread_dma_poll_interval_ms = 2;
 module_param(thread_dma_poll_interval_ms, int, 0644);
 MODULE_PARM_DESC(thread_dma_poll_interval_ms, "have the kernel thread poll dma every N ms (def:2)");
 
+unsigned int dma_status = 0;
+module_param(dma_status, int, 0644);
+MODULE_PARM_DESC(dma_status, "Manually start or stop dma activities (def:0 Stopped)");
+
 static unsigned int debug;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "enable debug messages");
@@ -207,8 +211,10 @@ static irqreturn_t sc0710_irq(int irq, void *dev_id)
 #ifdef CONFIG_PROC_FS
 static int sc0710_proc_state_show(struct seq_file *m, void *v)
 {
+	struct sc0710_dma_channel *ch;
 	struct sc0710_dev *dev;
 	struct list_head *list;
+	int i;
 
 	if (sc0710_devcount == 0)
 		return 0;
@@ -216,6 +222,9 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 	/* For each sc0710 in the system */
 	list_for_each(list, &sc0710_devlist) {
 		dev = list_entry(list, struct sc0710_dev, devlist);
+
+		seq_printf(m, "%s\n", dev->name);
+		seq_printf(m, "  dma status: %d\n", dma_status);
 
 		/* Show channel metrics */
 		//sc0710_i2c_hdmi_status_dump(dev);
@@ -226,20 +235,32 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 
 		mutex_lock(&dev->signalMutex);
 	        if (dev->locked) {
-			seq_printf(m, "%s    HDMI: %dx%d%c (%dx%d)\n",
-				dev->name,
+			seq_printf(m, "        HDMI: %dx%d%c (%dx%d)\n",
 				dev->width, dev->height,
 				dev->interlaced ? 'i' : 'p',
 				dev->pixelLineH, dev->pixelLineV);
 		} else {
-			seq_printf(m, "%s    HDMI: no signal\n", dev->name);
+			seq_printf(m, "        HDMI: no signal\n");
 		}
 		mutex_unlock(&dev->signalMutex);
 
-		seq_printf(m, "%s procamp: brightness %d\n", dev->name, dev->brightness);
-		seq_printf(m, "%s procamp: contrast %d\n", dev->name, dev->contrast);
-		seq_printf(m, "%s procamp: saturation %d\n", dev->name, dev->saturation);
-		seq_printf(m, "%s procamp: hue %d\n", dev->name, dev->hue);
+		seq_printf(m, "     procamp: brightness %d\n", dev->brightness);
+		seq_printf(m, "     procamp: contrast %d\n", dev->contrast);
+		seq_printf(m, "     procamp: saturation %d\n", dev->saturation);
+		seq_printf(m, "     procamp: hue %d\n", dev->hue);
+
+		for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
+			ch = &dev->channel[i];
+			seq_printf(m, "  ch[%d]\n", i);
+			seq_printf(m, "        type: %s\n",
+				ch->mediatype == CHTYPE_VIDEO ? "VIDEO" : "AUDIO");
+			seq_printf(m, "     dma bps: %lld (Mb/ps %lld) (MB/ps %lld)\n",
+				sc0710_things_per_second_query(&ch->bitsPerSecond),
+				sc0710_things_per_second_query(&ch->bitsPerSecond) / 1000000,
+				sc0710_things_per_second_query(&ch->bitsPerSecond) / 1000000 / 8);
+			seq_printf(m, "    descr ps: %lld\n",
+				sc0710_things_per_second_query(&ch->descPerSecond));
+		}
 
 	}
 
@@ -320,6 +341,7 @@ static int sc0710_thread_dma_function(void *data)
 {
 	struct sc0710_dev *dev = data;
 	int ret;
+	u32 lastDMAStatus = 0;
 
 	dprintk(1, "%s() Started\n", __func__);
 
@@ -337,6 +359,18 @@ static int sc0710_thread_dma_function(void *data)
 
 		if (thread_dma_active == 0)
 			continue;
+
+		if (lastDMAStatus == 0 && dma_status == 1) {
+			/* Spin up the dma */
+			dma_status = 2;
+			sc0710_dma_channels_start(dev);
+		} else
+		if (lastDMAStatus == 2 && dma_status == 0) {
+			/* Shutdown the dma */
+			dma_status = 0;
+			sc0710_dma_channels_stop(dev);
+		}
+		lastDMAStatus = dma_status;
 
 		/* Other parts of the driver need to guarantee that
 		 * various 'keep alives' aren't happening. We'll
@@ -457,6 +491,7 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 	pci_set_drvdata(pci_dev, dev);
 
 	printk(KERN_INFO "sc0710 device at %s\n", pci_name(pci_dev));
+	printk(KERN_INFO "sc0710 page-size %lu bytes\n", PAGE_SIZE);
 
 	sc0710_dma_channels_alloc(dev);
 
