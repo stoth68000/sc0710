@@ -70,9 +70,11 @@ int sc0710_dma_channels_start(struct sc0710_dev *dev)
 	}
 
 	/* TODO: What do these registers do? Any documentation? */
-	//sc_write(dev, 0, BAR0_00C8, 0x438);
-	sc_write(dev, 0, BAR0_00C8, 0x200);
-	//sc_write(dev, 0, BAR0_00C8, 0x200);
+
+	/* TODO: This register needs to be set to the height of the incoming
+	 * signal format.
+	 */
+	sc_write(dev, 0, BAR0_00C8, 0x438);
 	sc_write(dev, 0, BAR0_00D0, 0x4100);
 	sc_write(dev, 0, 0xcc, 0);
 	sc_write(dev, 0, 0xdc, 0);
