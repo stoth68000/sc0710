@@ -25,21 +25,6 @@
 
 #include "sc0710.h"
 
-/*
-struct sc0710_format_s
-{
-        u32   timingH;
-        u32   timeingV;
-        u32   width;
-        u32   height;
-        u32   interlaced;
-	u32   fpsX100;
-	u32   fpsnum;
-	u32   fpsden;
-        char *name;
-};
-*/
-
 static struct sc0710_format_s formats[] =
 {
 	{  858,  262,  720,  240, 1, 2997, 30000, 1001, "720x480i29.97" },
