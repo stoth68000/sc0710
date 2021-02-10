@@ -36,6 +36,16 @@
 #include <linux/mutex.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <media/v4l2-device.h>
+#include <media/v4l2-fh.h>
+#include <media/v4l2-ctrls.h>
+#include <media/v4l2-common.h>
+#include <media/v4l2-ioctl.h>
+#include <media/v4l2-event.h>
+#include <media/tuner.h>
+#include <media/tveeprom.h>
+#include <media/videobuf2-dma-sg.h>
+#include <media/rc-core.h>
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
@@ -77,6 +87,24 @@ struct sc0710_things_per_second
 	struct timespec lastTime;
 	u64 persecond;
 	u64 accumulator;
+};
+
+/* buffer for one video frame */
+struct sc0710_buffer
+{
+	/* common v4l buffer stuff -- must be first */
+	struct vb2_buffer       vb;
+	struct list_head        queue;
+
+	/* sc0710 specific */
+};
+
+struct sc0710_dmaqueue {
+	struct list_head       active;
+	struct list_head       queued;
+	struct timer_list      timeout;
+	//struct btcx_riscmem    stopper;
+	u32                    count;
 };
 
 struct sc0710_dma_descriptor
@@ -149,6 +177,11 @@ struct sc0710_dma_channel
 	/* Statistics */
 	struct sc0710_things_per_second bitsPerSecond;
 	struct sc0710_things_per_second descPerSecond;
+
+	/* V4L2 */
+	struct video_device         *video_dev;
+	struct video_device	    *v4l_device;
+	struct sc0710_dmaqueue       vidq;
 };
 
 struct sc0710_i2c {
@@ -220,6 +253,9 @@ struct sc0710_dev {
 	s32                        contrast;
 	s32                        saturation;
 	s32                        hue;
+
+	/* V4L2 */
+	struct v4l2_device	     v4l2_dev;
 };
 
 
@@ -275,4 +311,8 @@ void sc0710_dma_channels_stop(struct sc0710_dev *dev);
 void sc0710_things_per_second_reset(struct sc0710_things_per_second *tps);
 void sc0710_things_per_second_update(struct sc0710_things_per_second *tps, s64 value);
 s64  sc0710_things_per_second_query(struct sc0710_things_per_second *tps);
+
+/* video.c */
+void sc0710_video_unregister(struct sc0710_dma_channel *ch);
+int  sc0710_video_register(struct sc0710_dma_channel *ch);
 

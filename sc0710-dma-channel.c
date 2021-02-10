@@ -280,6 +280,7 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	u32 baseaddr,
 	enum sc0710_channel_type_e mediatype)
 {
+	int ret;
 	struct sc0710_dma_channel *ch = &dev->channel[nr];
 	if (nr >= SC0710_MAX_CHANNELS)
 		return -1;
@@ -339,6 +340,10 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 
 	sc0710_dma_channel_descriptors_dump(ch);
 
+	if (ch->mediatype == CHTYPE_VIDEO) {
+		//ret = sc0710_video_register(ch);
+	}
+
 	return 0; /* Success */
 };
 
@@ -352,6 +357,11 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 		return;
 
 	ch->enabled = 0;
+
+	if (ch->mediatype == CHTYPE_VIDEO) {
+		//sc0710_video_unregister(ch);
+	}
+
 	sc0710_dma_channel_descriptors_free(ch);
 
 	printk(KERN_INFO "%s channel %d deallocated\n", dev->name, nr);
