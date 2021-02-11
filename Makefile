@@ -18,6 +18,8 @@ load:	all
 	sudo cp /dev/null /var/log/debug
 	sudo modprobe videobuf2-core
 	sudo modprobe videodev
+	#sudo modprobe videobuf-dma-sg
+	sudo modprobe videobuf-vmalloc
 	sudo insmod ./sc0710.ko \
 		thread_dma_poll_interval_ms=2 \
 		dma_status=0
@@ -29,3 +31,5 @@ unload:
 tarball:
 	tar zcf ../sc0710-dev-$(shell date +%Y%m%d-%H%M%S).tgz $(TARFILES)
 
+deps:
+	sudo yum -y install v4l-utils

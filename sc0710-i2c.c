@@ -150,7 +150,9 @@ int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 		if (dev->interlaced)
 			dev->height *= 2;
 
+		dev->fmt = sc0710_format_find_by_timing(dev->pixelLineH, dev->pixelLineV);
 	} else {
+		dev->fmt = NULL;
 		dev->locked = 0;
 		dev->width = 0;
 		dev->height = 0;

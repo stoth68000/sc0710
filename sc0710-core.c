@@ -235,13 +235,15 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 
 		mutex_lock(&dev->signalMutex);
 	        if (dev->locked) {
-			seq_printf(m, "        HDMI: %dx%d%c (%dx%d)\n",
+			seq_printf(m, "        HDMI: %s -- %dx%d%c (%dx%d)\n",
+				dev->fmt ? dev->fmt->name : "UNDEFINED",
 				dev->width, dev->height,
 				dev->interlaced ? 'i' : 'p',
 				dev->pixelLineH, dev->pixelLineV);
 		} else {
 			seq_printf(m, "        HDMI: no signal\n");
 		}
+		seq_printf(m, "         fmt: %p\n", dev->fmt);
 		mutex_unlock(&dev->signalMutex);
 
 		seq_printf(m, "     procamp: brightness %d\n", dev->brightness);
@@ -520,7 +522,6 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 
 fail_irq:
 	sc0710_dev_unregister(dev);
-	v4l2_device_unregister(&dev->v4l2_dev);
 fail_unreg:
 	kfree(dev);
 	return err;

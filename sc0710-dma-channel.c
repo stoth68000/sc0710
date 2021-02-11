@@ -291,6 +291,9 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	memset(ch, 0, sizeof(*ch));
 	mutex_init(&ch->lock);
 
+	spin_lock_init(&ch->v4l2_capture_list_lock);
+	INIT_LIST_HEAD(&ch->v4l2_capture_list);
+
 	ch->dev = dev;
 	ch->nr = nr;
 	ch->enabled = 1;
@@ -341,7 +344,7 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	sc0710_dma_channel_descriptors_dump(ch);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		//ret = sc0710_video_register(ch);
+		ret = sc0710_video_register(ch);
 	}
 
 	return 0; /* Success */
@@ -359,7 +362,7 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 	ch->enabled = 0;
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		//sc0710_video_unregister(ch);
+		sc0710_video_unregister(ch);
 	}
 
 	sc0710_dma_channel_descriptors_free(ch);

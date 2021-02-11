@@ -44,7 +44,7 @@
 #include <media/v4l2-event.h>
 #include <media/tuner.h>
 #include <media/tveeprom.h>
-#include <media/videobuf2-dma-sg.h>
+#include <media/videobuf-vmalloc.h>
 #include <media/rc-core.h>
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
@@ -93,10 +93,10 @@ struct sc0710_things_per_second
 struct sc0710_buffer
 {
 	/* common v4l buffer stuff -- must be first */
-	struct vb2_buffer       vb;
-	struct list_head        queue;
+	struct videobuf_buffer  vb;
 
 	/* sc0710 specific */
+	const struct sc0710_format   *fmt;
 };
 
 struct sc0710_dmaqueue {
@@ -131,6 +131,13 @@ enum sc0710_channel_type_e
 	CHTYPE_AUDIO,
 };
 
+enum sc0710_channel_state_e
+{
+	STATE_UNDEFINED = 0,
+	STATE_STOPPED,
+	STATE_RUNNING
+};
+
 struct sc0710_dma_channel
 {
 	struct sc0710_dev           *dev;
@@ -138,6 +145,7 @@ struct sc0710_dma_channel
 	u32                          enabled;
 	enum sc0710_channel_dir_e    direction;
 	enum sc0710_channel_type_e   mediatype;
+	enum sc0710_channel_state_e  state;
 
 	struct mutex                 lock;
 	u32                          numDescriptors;
@@ -179,9 +187,15 @@ struct sc0710_dma_channel
 	struct sc0710_things_per_second descPerSecond;
 
 	/* V4L2 */
-	struct video_device         *video_dev;
-	struct video_device	    *v4l_device;
+	struct video_device         *v4l_device;
 	struct sc0710_dmaqueue       vidq;
+	spinlock_t                   slock;
+
+	/* Buffering */
+	spinlock_t                   v4l2_capture_list_lock;
+	struct list_head             v4l2_capture_list;
+	struct timer_list            timeout;
+	u32                          videousers;
 };
 
 struct sc0710_i2c {
@@ -193,7 +207,7 @@ struct sc0710_i2c {
 	u32                        i2c_rc;
 };
 
-struct sc0710_format_s
+struct sc0710_format
 {
 	u32   timingH;
 	u32   timingV;
@@ -203,6 +217,7 @@ struct sc0710_format_s
 	u32   fpsX100;
 	u32   fpsnum;
 	u32   fpsden;
+	u32   depth; /* bits */
 	char *name;
 };
 
@@ -247,17 +262,23 @@ struct sc0710_dev {
 	u32                        pixelLineH, pixelLineV; /* HDMI line format */
 	u32                        width, height;    /* Actual display */
 	u32                        interlaced;
+	const struct sc0710_format *fmt;
 
 	/* Procamp */
 	s32                        brightness;
 	s32                        contrast;
 	s32                        saturation;
 	s32                        hue;
-
-	/* V4L2 */
-	struct v4l2_device	     v4l2_dev;
 };
 
+struct sc0710_fh
+{
+	struct v4l2_fh             fh;
+	struct sc0710_dma_channel *ch;
+	unsigned int               resources;
+	enum v4l2_buf_type         type;
+	struct videobuf_queue      vidq;
+};
 
 /* ----------------------------------------------------------- */
 /* sc0710-core.c                                              */
@@ -287,7 +308,7 @@ int sc0710_i2c_read_status3(struct sc0710_dev *dev);
 int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
 
 /* -video.c */
-const struct sc0710_format_s *sc0710_format_find_by_timing(u32 timingH, u32 timingV);
+const struct sc0710_format *sc0710_format_find_by_timing(u32 timingH, u32 timingV);
 
 /* -dma-channel.c */
 int  sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction, u32 baseaddr,
