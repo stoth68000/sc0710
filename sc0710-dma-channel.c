@@ -33,6 +33,12 @@
 
 #include "sc0710.h"
 
+static int dma_channel_debug = 0;
+#define dprintk(level, fmt, arg...)\
+        do { if (dma_channel_debug >= level)\
+                printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
+        } while (0)
+
 /* We're not doing IRQ and interrupt servicing of the dma subsystem, instead
  * we're going to rely on a 2ms kernel thread to poll and dequeue
  * buffers.
@@ -135,6 +141,8 @@ static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_d
 		}
 
 		/* Copy dma data to user buffer. */
+		dprintk(1, "%s() copying %lu bytes\n", __func__, vb_buf->vb.size);
+
 		memcpy(dst, ch->buf_cpu[descrNr], vb_buf->vb.size);
 
 		do_gettimeofday(&vb_buf->vb.ts);
@@ -158,6 +166,7 @@ static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_d
 int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 {
 	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
+	struct sc0710_dev *dev = ch->dev;
 	int i, processed = 0;
 	u32 v, ctrl;
 	u32 wbm[2];
@@ -178,7 +187,7 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 		return processed;
 	}
 
-	printk("ch#%d    was %d now %d\n", ch->nr, ch->dma_completed_descriptor_count_last, v);
+	dprintk(3, "ch#%d    was %d now %d\n", ch->nr, ch->dma_completed_descriptor_count_last, v);
 
 	ch->dma_completed_descriptor_count_last = v;
 
@@ -212,7 +221,7 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 			static int domore = 0;
 
 			/* TODO: dequeue this descriptor picbuf */
-			printk("%s ch#%d    [%02d] %08x - wbm %08x %08x   q: %08x  p: %p%s\n",
+			dprintk(3, "%s ch#%d    [%02d] %08x - wbm %08x %08x   q: %08x  p: %p%s\n",
 				ch->dev->name,
 				ch->nr,
 				i,
@@ -220,13 +229,15 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 				wbm[0],
 				wbm[1], q, p, dequeueItem ? " (DQ)" : "");
 
-			if (domore++ < 8) {
-				for (j = 0; j < 200; j++) {
-					if (j % 16 == 0)
-						printk("\n%p: ", ptr + j);
-					printk(" %04x", *(ptr + j));
+			if (dma_channel_debug > 1) {
+				if (domore++ < 8) {
+					for (j = 0; j < 200; j++) {
+						if (j % 16 == 0)
+							printk("\n%p: ", ptr + j);
+						printk(" %04x", *(ptr + j));
+					}
+					printk("\n");
 				}
-				printk("\n");
 			}
 
 			sc0710_things_per_second_update(&ch->bitsPerSecond, wbm[1] * 8);
