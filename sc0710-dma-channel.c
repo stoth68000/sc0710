@@ -232,7 +232,9 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 			sc0710_things_per_second_update(&ch->bitsPerSecond, wbm[1] * 8);
 			sc0710_things_per_second_update(&ch->descPerSecond, 1);
 
-			sc0710_dma_pt_dequeue(ch, desc, i);
+			if (ch->mediatype == CHTYPE_VIDEO) {
+				sc0710_dma_pt_dequeue(ch, desc, i);
+			}
 
 			/* Reset the metadat so we don't attempt to process this during the
  			 * next service call.

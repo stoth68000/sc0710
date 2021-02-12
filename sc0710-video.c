@@ -32,6 +32,8 @@ static int video_debug = 1;
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
         } while (0)
 
+static void sc0710_vid_timeout(unsigned long data);
+
 #define FILL_MODE_COLORBARS 0
 #define FILL_MODE_GREENSCREEN 1
 #define FILL_MODE_BLUESCREEN 2
@@ -183,7 +185,7 @@ static int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 	struct sc0710_dev *dev = ch->dev;
 	int ret;
 
-	dprintk(1, "%s()\n", __func__);
+	dprintk(1, "%s(ch#%d)\n", __func__, ch->nr);
 
 	if (unlikely(fh->type != V4L2_BUF_TYPE_VIDEO_CAPTURE))
 		return -EINVAL;
@@ -412,6 +414,10 @@ static int sc0710_video_open(struct file *file)
 		sizeof(struct sc0710_buffer),
 		fh, NULL);
 
+	init_timer(&ch->timeout);
+	ch->timeout.function = sc0710_vid_timeout;
+	ch->timeout.data     = (unsigned long)ch;
+
 	file->private_data = fh;
 
 	mutex_lock(&ch->lock);
@@ -580,12 +586,6 @@ int sc0710_video_register(struct sc0710_dma_channel *ch)
 	int err;
 
 	spin_lock_init(&ch->slock);
-	INIT_LIST_HEAD(&ch->vidq.active);
-	INIT_LIST_HEAD(&ch->vidq.queued);
-
-	ch->vidq.timeout.function = sc0710_vid_timeout;
-	ch->vidq.timeout.data     = (unsigned long)ch;
-	init_timer(&ch->vidq.timeout);
 
 	ch->v4l_device = video_device_alloc();
 	if (ch->v4l_device == NULL) {

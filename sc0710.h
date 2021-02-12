@@ -190,7 +190,6 @@ struct sc0710_dma_channel
 
 	/* V4L2 */
 	struct video_device         *v4l_device;
-	struct sc0710_dmaqueue       vidq;
 	spinlock_t                   slock;
 
 	/* Buffering */
