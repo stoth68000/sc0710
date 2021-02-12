@@ -149,7 +149,6 @@ static int vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 	dprintk(1, "%s()\n", __func__);
 
 	*i = 0;
-	dprintk(1, "%s() returns %d\n", __func__, *i);
 
 	return 0;
 }
@@ -277,12 +276,12 @@ static int sc0710_prepare_buffer(struct videobuf_queue *q, struct sc0710_dma_cha
 
 	buf->vb.size = fmt->framesize;
 
-	dprintk(3, "%s() Resolution: %dx%d\n", __func__, fmt->width, fmt->height);
-	dprintk(3, "%s() vb.width = %d\n", __func__, buf->vb.width);
-	dprintk(3, "%s() vb.height = %d\n", __func__, buf->vb.height);
-	dprintk(3, "%s() vb.size = %ld\n", __func__, buf->vb.size);
-	dprintk(3, "%s() vb.bsize = %lu\n", __func__, buf->vb.bsize);
-	dprintk(3, "%s() vb.baddr = %lx\n", __func__, buf->vb.baddr);
+	dprintk(2, "%s() Resolution: %dx%d\n", __func__, fmt->width, fmt->height);
+	dprintk(2, "%s() vb.width = %d\n", __func__, buf->vb.width);
+	dprintk(2, "%s() vb.height = %d\n", __func__, buf->vb.height);
+	dprintk(2, "%s() vb.size = %ld\n", __func__, buf->vb.size);
+	dprintk(2, "%s() vb.bsize = %lu\n", __func__, buf->vb.bsize);
+	dprintk(2, "%s() vb.baddr = %lx\n", __func__, buf->vb.baddr);
 
 	if ((buf->vb.baddr != 0)  && (buf->vb.bsize < buf->vb.size)) {
 		return -EINVAL;
@@ -339,12 +338,13 @@ static int buffer_setup(struct videobuf_queue *q, unsigned int *count, unsigned 
 	if (dev->fmt == 0)
 		return -ENOMEM;
 
-        *size = dev->fmt->framesize;
+	*size = dev->fmt->framesize;
+	dprintk(2, "%s() buffer size will be %d bytes\n", __func__, *size);
 
-        if (0 == *count)
-                *count = 32;
+	if (0 == *count)
+		*count = 32;
 
-        return 0;
+	return 0;
 }
 
 static int buffer_prepare(struct videobuf_queue *q, struct videobuf_buffer *vb, enum v4l2_field field)
@@ -477,7 +477,7 @@ static unsigned int sc0710_video_poll(struct file *file, struct poll_table_struc
 	struct sc0710_fh *fh = file->private_data;
 	struct sc0710_dev *dev = fh->ch->dev;
 
-	dprintk(3, "%s()\n", __func__);
+	dprintk(1, "%s()\n", __func__);
 
 	switch (fh->type) {
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
