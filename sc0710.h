@@ -323,6 +323,7 @@ int  sc0710_dma_channel_service(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_start_prep(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_start(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_stop(struct sc0710_dma_channel *ch);
+enum sc0710_channel_state_e sc0710_dma_channel_state(struct sc0710_dma_channel *ch);
 
 /* --dma-channels.c */
 int  sc0710_dma_channels_alloc(struct sc0710_dev *dev);

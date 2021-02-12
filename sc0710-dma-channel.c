@@ -364,6 +364,7 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	ch->enabled = 1;
 	ch->direction = direction;
 	ch->mediatype = mediatype;
+	ch->state = STATE_STOPPED;
 	sc0710_things_per_second_reset(&ch->bitsPerSecond);
 	sc0710_things_per_second_reset(&ch->descPerSecond);
 
@@ -453,12 +454,19 @@ int sc0710_dma_channel_stop(struct sc0710_dma_channel *ch)
 	sc_write(ch->dev, 1, ch->reg_dma_control_w1c, 0x00000001);
 	sc0710_things_per_second_reset(&ch->bitsPerSecond);
 	sc0710_things_per_second_reset(&ch->descPerSecond);
+	ch->state = STATE_STOPPED;
 	return 0;
 }
 
 int sc0710_dma_channel_start(struct sc0710_dma_channel *ch)
 {
 	sc_write(ch->dev, 1, ch->reg_dma_control_w1s, 0x00000001);
+	ch->state = STATE_RUNNING;
 	return 0;
+}
+
+enum sc0710_channel_state_e sc0710_dma_channel_state(struct sc0710_dma_channel *ch)
+{
+	return ch->state;
 }
 
