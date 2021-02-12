@@ -218,6 +218,7 @@ struct sc0710_format
 	u32   fpsnum;
 	u32   fpsden;
 	u32   depth; /* bits */
+	u32   framesize; /* bytes */
 	char *name;
 };
 
@@ -307,7 +308,8 @@ int sc0710_i2c_read_status2(struct sc0710_dev *dev);
 int sc0710_i2c_read_status3(struct sc0710_dev *dev);
 int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
 
-/* -video.c */
+/* -formats.c */
+void sc0710_format_initialize(void);
 const struct sc0710_format *sc0710_format_find_by_timing(u32 timingH, u32 timingV);
 
 /* -dma-channel.c */

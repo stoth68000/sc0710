@@ -608,6 +608,7 @@ static int __init sc0710_init(void)
 #ifdef CONFIG_PROC_FS
 	sc0710_proc_create();
 #endif
+	sc0710_format_initialize();
 	return pci_register_driver(&sc0710_pci_driver);
 }
 
