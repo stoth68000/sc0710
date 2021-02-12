@@ -33,3 +33,6 @@ tarball:
 
 deps:
 	sudo yum -y install v4l-utils
+
+test:
+	dd if=/dev/video0 of=frame.bin bs=1843200 count=20
