@@ -62,6 +62,8 @@
 
 #define SC0710_MAXBOARDS 8
 
+#define VBUF_TIMEOUT (HZ)
+
 /* Max number of inputs by card */
 #define MAX_SC0710_INPUT 8
 #define INPUT(nr) (&sc0710_boards[dev->board].input[nr])

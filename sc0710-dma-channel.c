@@ -108,6 +108,53 @@
  * Return < 0 on error
  * Return number of buffers we copyinto from dma into user buffers.
  */
+static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor *desc, int descrNr)
+{
+	struct sc0710_dev *dev = ch->dev;
+	struct sc0710_buffer *vb_buf = NULL;
+	unsigned long flags;
+	u8 *dst = NULL;
+
+	spin_lock_irqsave(&ch->v4l2_capture_list_lock, flags);
+
+	do
+	{
+		if (list_empty(&ch->v4l2_capture_list))
+			break;
+
+		vb_buf = list_entry(ch->v4l2_capture_list.next, struct sc0710_buffer, vb.queue);
+		if (vb_buf->vb.state != VIDEOBUF_QUEUED) {
+			printk(KERN_ERR "%s() vb was not QUEUED, is 0x%x\n", __func__, vb_buf->vb.state);
+			break;
+		}
+
+		dst = videobuf_to_vmalloc(&vb_buf->vb);
+		if (!dst) {
+			printk(KERN_ERR "%s() vb not accessible\n", __func__);
+			break;
+		}
+
+		/* Copy dma data to user buffer. */
+		memcpy(dst, ch->buf_cpu[descrNr], vb_buf->vb.size);
+
+		do_gettimeofday(&vb_buf->vb.ts);
+		list_del(&vb_buf->vb.queue);
+#if 0
+        if (do_colorbars && (errors_on_colorsbars == 1))
+            vb_buf->vb.state = VIDEOBUF_ERROR;
+        else
+#endif
+		vb_buf->vb.state = VIDEOBUF_DONE;
+		wake_up(&vb_buf->vb.done);
+
+		/* re-set the buffer timeout */
+		mod_timer(&ch->timeout, jiffies + VBUF_TIMEOUT);
+
+	} while (0);
+
+	spin_unlock_irqrestore(&ch->v4l2_capture_list_lock, flags);
+}
+
 int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 {
 	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
@@ -184,6 +231,8 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 
 			sc0710_things_per_second_update(&ch->bitsPerSecond, wbm[1] * 8);
 			sc0710_things_per_second_update(&ch->descPerSecond, 1);
+
+			sc0710_dma_pt_dequeue(ch, desc, i);
 
 			/* Reset the metadat so we don't attempt to process this during the
  			 * next service call.

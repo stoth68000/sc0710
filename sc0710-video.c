@@ -32,6 +32,65 @@ static int video_debug = 1;
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
         } while (0)
 
+#define FILL_MODE_COLORBARS 0
+#define FILL_MODE_GREENSCREEN 1
+#define FILL_MODE_BLUESCREEN 2
+#define FILL_MODE_BLACKSCREEN 3
+#define FILL_MODE_REDSCREEN 4
+
+/* 75% IRE colorbars */
+static unsigned char colorbars[7][4] =
+{
+	{ 0xc0, 0x80, 0xc0, 0x80 },
+	{ 0xaa, 0x20, 0xaa, 0x8f },
+	{ 0x86, 0xa0, 0x86, 0x20 },
+	{ 0x70, 0x40, 0x70, 0x2f },
+	{ 0x4f, 0xbf, 0x4f, 0xd0 },
+	{ 0x39, 0x5f, 0x39, 0xe0 },
+	{ 0x15, 0xe0, 0x15, 0x70 }
+};
+static unsigned char blackscreen[4] = { 0x00, 0x80, 0x00, 0x80 };
+static unsigned char bluescreen[4] = { 0x1d, 0xff, 0x1d, 0x6b };
+static unsigned char redscreen[4] = { 0x39, 0x5f, 0x39, 0xe0 };
+
+static void fill_frame(struct sc0710_dma_channel *ch,
+	unsigned char *dest_frame, unsigned int width,
+	unsigned int height, unsigned int fillmode)
+{
+	unsigned int width_bytes = width * 2;
+	unsigned int i, divider;
+
+	if (fillmode > FILL_MODE_REDSCREEN)
+		fillmode = FILL_MODE_BLACKSCREEN;
+
+	switch (fillmode) {
+	case FILL_MODE_COLORBARS:
+		divider = (width_bytes / 7) + 1;
+		for (i = 0; i < width_bytes; i += 4)
+			memcpy(&dest_frame[i], &colorbars[i / divider], 4);
+		break;
+	case FILL_MODE_GREENSCREEN:
+		memset(dest_frame, 0, width_bytes);
+		break;
+	case FILL_MODE_BLUESCREEN:
+		for (i = 0; i < width_bytes; i += 4)
+			memcpy(&dest_frame[i], bluescreen, 4);
+		break;
+	case FILL_MODE_REDSCREEN:
+		for (i = 0; i < width_bytes; i += 4)
+			memcpy(&dest_frame[i], redscreen, 4);
+		break;
+	case FILL_MODE_BLACKSCREEN:
+		for (i = 0; i < width_bytes; i += 4)
+			memcpy(&dest_frame[i], blackscreen, 4);
+	}
+
+	for (i = 1; i < height; i++) {
+		memcpy(dest_frame + width_bytes, dest_frame, width_bytes);
+		dest_frame += width_bytes;
+	}
+}
+
 static struct videobuf_queue *get_queue(struct sc0710_fh *fh)
 {
 	switch (fh->type) {
@@ -206,12 +265,11 @@ static int sc0710_prepare_buffer(struct videobuf_queue *q, struct sc0710_dma_cha
 	const struct sc0710_format *fmt = dev->fmt;
 	int rc = 0;
 
-
 	/* check settings */
 	if (fmt == 0)
 		return -EINVAL;
 
-	buf->vb.size = (fmt->width * fmt->height * (fmt->depth / 8));
+	buf->vb.size = fmt->framesize;
 
 	dprintk(3, "%s() Resolution: %dx%d\n", __func__, fmt->width, fmt->height);
 	dprintk(3, "%s() vb.width = %d\n", __func__, buf->vb.width);
@@ -225,8 +283,7 @@ static int sc0710_prepare_buffer(struct videobuf_queue *q, struct sc0710_dma_cha
 	}
 
 	/* alloc + fill struct (if changed) */
-	if (buf->vb.width != fmt->width || buf->vb.height != fmt->height ||
-	    buf->vb.field != field || buf->fmt != fmt)
+	if (buf->vb.width != fmt->width || buf->vb.height != fmt->height || buf->vb.field != field || buf->fmt != fmt)
 	{
 		buf->vb.width  = fmt->width;
 		buf->vb.height = fmt->height;
@@ -269,16 +326,17 @@ fail:
  */
 static int buffer_setup(struct videobuf_queue *q, unsigned int *count, unsigned int *size)
 {
-        //struct sc0710_fh *fh = q->priv_data;
+	struct sc0710_fh *fh = q->priv_data;
+	struct sc0710_dma_channel *ch = fh->ch;
+	struct sc0710_dev *dev = ch->dev;
 
-#if 0
-        *size = fh->fmt->depth*fh->width*fh->height >> 3;
+	if (dev->fmt == 0)
+		return -ENOMEM;
+
+        *size = dev->fmt->framesize;
+
         if (0 == *count)
                 *count = 32;
-
-        if (*size * *count > vid_limit * 1024 * 1024)
-                *count = (vid_limit * 1024 * 1024) / *size;
-#endif
 
         return 0;
 }
@@ -297,6 +355,7 @@ static void buffer_queue(struct videobuf_queue *q, struct videobuf_buffer *vb)
 	struct sc0710_fh *fh = q->priv_data;
 	struct sc0710_dma_channel *ch = fh->ch;
 	struct sc0710_buffer *buf = container_of(vb, struct sc0710_buffer, vb);
+
 	buf->vb.state = VIDEOBUF_QUEUED;
 	list_add_tail(&buf->vb.queue, &ch->v4l2_capture_list);
 }
@@ -467,7 +526,34 @@ static void sc0710_vid_timeout(unsigned long data)
 {
 	struct sc0710_dma_channel *ch = (struct sc0710_dma_channel *)data;
 	struct sc0710_dev *dev = ch->dev;
+	struct sc0710_buffer *buf;
+	unsigned long flags;
+	u8 *dst;
+
 	dprintk(1, "%s()\n", __func__);
+
+	/* Return all of the buffers in error state, so the vbi/vid inode
+	 * can return from blocking.
+	 */
+	spin_lock_irqsave(&ch->v4l2_capture_list_lock, flags);
+	while (!list_empty(&ch->v4l2_capture_list)) {
+		buf = list_entry(ch->v4l2_capture_list.next, struct sc0710_buffer, vb.queue);
+
+		dst = videobuf_to_vmalloc(&buf->vb);
+		if (dst) {
+			fill_frame(ch, dst, buf->vb.width, buf->vb.height, FILL_MODE_COLORBARS);
+		}
+
+		buf->vb.state = VIDEOBUF_DONE;
+
+		do_gettimeofday(&buf->vb.ts);
+		list_del(&buf->vb.queue);
+		wake_up(&buf->vb.done);
+	}
+	spin_unlock_irqrestore(&ch->v4l2_capture_list_lock, flags);
+
+	/* re-set the buffer timeout */
+	mod_timer(&ch->timeout, jiffies + VBUF_TIMEOUT);
 }
 
 void sc0710_video_unregister(struct sc0710_dma_channel *ch)
