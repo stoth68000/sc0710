@@ -420,6 +420,8 @@ static int sc0710_thread_hdmi_function(void *data)
 		 */
 		mutex_lock(&dev->kthread_hdmi_lock);
 
+		sc0710_i2c_read_hdmi_status(dev);
+
 		mutex_unlock(&dev->kthread_hdmi_lock);
 	}
 
