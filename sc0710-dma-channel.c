@@ -116,7 +116,9 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 	u32 wbm[2];
 	u32 *p = (u32 *)ch->pt_cpu;
 	u32 q;
+	u16 *ptr = (u16 *)ch->buf_cpu;
 	int dequeueItem = 0;
+	int j;
 
 	p += (PAGE_SIZE / 4);
 
@@ -145,6 +147,7 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 
 		if (wbm[0] || wbm[1]) {
 			dequeueItem = 1;
+			ptr = (u16 *)ch->buf_cpu[i];
 		}
 
 #if 0
@@ -159,6 +162,8 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 
 		if (dequeueItem)
 		{
+			static int domore = 0;
+
 			/* TODO: dequeue this descriptor picbuf */
 			printk("%s ch#%d    [%02d] %08x - wbm %08x %08x   q: %08x  p: %p%s\n",
 				ch->dev->name,
@@ -167,6 +172,15 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 				desc->control,
 				wbm[0],
 				wbm[1], q, p, dequeueItem ? " (DQ)" : "");
+
+			if (domore++ < 8) {
+				for (j = 0; j < 200; j++) {
+					if (j % 16 == 0)
+						printk("\n%p: ", ptr + j);
+					printk(" %04x", *(ptr + j));
+				}
+				printk("\n");
+			}
 
 			sc0710_things_per_second_update(&ch->bitsPerSecond, wbm[1] * 8);
 			sc0710_things_per_second_update(&ch->descPerSecond, 1);
@@ -304,7 +318,7 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ch->numDescriptors = 6;
-		ch->buf_size = 0x1fa400;
+		ch->buf_size = 0x1c2000;
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
 		ch->numDescriptors = 4;
