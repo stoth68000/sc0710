@@ -440,6 +440,9 @@ static int sc0710_video_release(struct file *file)
 
 	mutex_lock(&ch->lock);
 	ch->videousers--;
+	if (ch->videousers == 0) {
+		vidioc_streamoff(file, fh, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	}
 	mutex_unlock(&ch->lock);
 
 	videobuf_queue_cancel(&fh->vidq);
@@ -458,16 +461,18 @@ static ssize_t sc0710_video_read(struct file *file, char __user *data, size_t co
 	struct sc0710_dma_channel *ch = fh->ch;
 	struct sc0710_dev *dev = ch->dev;
 
-	dprintk(1, "%s()\n", __func__);
+	dprintk(2, "%s()\n", __func__);
 
-	if ((ch->videousers > 1) || (ch->state == STATE_RUNNING)) {
+	if (ch->videousers > 1) {
 		dprintk(1, "%s() -EBUSY\n", __func__);
 		return -EBUSY;
 	}
 
 	switch (fh->type) {
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
-		vidioc_streamon(file, fh, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		if (sc0710_dma_channel_state(ch) != STATE_RUNNING) {
+			vidioc_streamon(file, fh, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		}
 		return videobuf_read_one(&fh->vidq, data, count, ppos, file->f_flags & O_NONBLOCK);
 	default:
 		return -EBUSY;
