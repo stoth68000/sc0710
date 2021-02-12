@@ -210,6 +210,8 @@ static int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 		channel->frame_format_len = 0;
 #endif
 
+	mod_timer(&ch->timeout, jiffies + VBUF_TIMEOUT);
+
 	if (sc0710_dma_channels_start(dev) < 0)
 		return -EINVAL;
 
@@ -244,6 +246,8 @@ static int vidioc_streamoff(struct file *file, void *priv, enum v4l2_buf_type i)
 	sc0710_dma_channels_stop(dev);
 
 	err = videobuf_streamoff(get_queue(fh));
+
+	del_timer(&ch->timeout);
 #if 0
 	if (err == 0)
 		dev->lastStreamonFH = 0;
@@ -491,11 +495,9 @@ static const struct v4l2_file_operations video_fops = {
 	.owner	        = THIS_MODULE,
 	.open           = sc0710_video_open,
 	.release        = sc0710_video_release,
-#if 0
 	.read           = sc0710_video_read,
 	.poll		= sc0710_video_poll,
 	.mmap           = sc0710_video_mmap,
-#endif
 	.unlocked_ioctl = video_ioctl2,
 };
 
@@ -530,7 +532,7 @@ static void sc0710_vid_timeout(unsigned long data)
 	unsigned long flags;
 	u8 *dst;
 
-	dprintk(1, "%s()\n", __func__);
+	dprintk(0, "%s(ch#%d)\n", __func__, ch->nr);
 
 	/* Return all of the buffers in error state, so the vbi/vid inode
 	 * can return from blocking.
