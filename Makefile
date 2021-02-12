@@ -36,3 +36,13 @@ deps:
 
 test:
 	dd if=/dev/video0 of=frame.bin bs=1843200 count=20
+
+encode:
+	#ffmpeg -f rawvideo -pixel_format uyvy422 -video_size 1280x720 -i /dev/video0 -vcodec libx264 -f mpegts encoder2.ts
+	#ffmpeg -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 -vcodec libx264 -f mpegts encoder3.ts
+	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 -vcodec libx264 -f mpegts encoder0.ts
+
+stream:
+	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 \
+		-vcodec libx264 -preset ultrafast -tune zerolatency \
+		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
