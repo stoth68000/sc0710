@@ -211,10 +211,10 @@ static int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 		channel->frame_format_len = 0;
 #endif
 
-	mod_timer(&ch->timeout, jiffies + VBUF_TIMEOUT);
-
 	if (sc0710_dma_channels_start(dev) < 0)
 		return -EINVAL;
+
+	mod_timer(&ch->timeout, jiffies + VBUF_TIMEOUT);
 
 	ret = videobuf_streamon(get_queue(fh));
 #if 0
@@ -244,11 +244,13 @@ static int vidioc_streamoff(struct file *file, void *priv, enum v4l2_buf_type i)
 	if (chip && chip->capture_pcm_substream)
 		tm6200_capture_disconnect(chip->capture_pcm_substream);
 #endif
+
+	del_timer(&ch->timeout);
+
 	sc0710_dma_channels_stop(dev);
 
 	err = videobuf_streamoff(get_queue(fh));
 
-	del_timer(&ch->timeout);
 #if 0
 	if (err == 0)
 		dev->lastStreamonFH = 0;
