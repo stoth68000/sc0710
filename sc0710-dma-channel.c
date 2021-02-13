@@ -50,20 +50,30 @@ static int dma_channel_debug = 2;
  * unwanted latency.
  *
  * The basic design for this driver is, every 2ms this function is called.
- * We'll read the DMA controller count register for this channel,
- * if its changed since the last time we read - then another descriptor
- * has completed. Upon descriptor completion, we'll look up which descriptor
+ * We'll read the DMA controller 'descriptors count complete' register
+ * for this channel.
+ *
+ * If the descriptor counter has changed since the last time we read
+ * then another descriptor has completed.
+ *
+ * Upon descriptor completion, we'll look up which descriptor
  * has changed, and copy the data out of the descriptor buffer BEFORE
  * the dma subsystem has chance to ovewrite it.
- * Each channel has N descriptors, a minimum of four. So, out latency is
- * the counter changes, we notice 2ms later, we spend micro seconds
+ *
+ * Each channel has N chains of descriptors, a minimum of four.
+ * So, our latency is  the counter changes, we notice 2ms later, we spend micro seconds
  * looking at each descriptor in turn (N - typically 6), when we detect
  * that its changed, we'll immediately memcpy the dma dest buffer
- * into a previously allocated user facing buffer.
+ * into a previously allocated user facing video 4 linux buffer.
  *
  * 1. We'll allocate two PAGE of PCIe root addressible ram
- *    to hold a) descriptors and b) metadata writeback data provided
+ *    to hold a) scatter gather descriptors and
+ *            b) metadata writeback data provided
  *    by the card root controller.
+ *
+ *    When the DMA controller finished a descriptor, it updates
+ *    the metadata writeback so we'll monitor the metadata to see
+ *    which descriptor chains have finished.
  *
  *    0x0000  descriptor1
  *    0x0020  descriptor2
@@ -81,34 +91,12 @@ static int dma_channel_debug = 2;
  * 2. The descriptors will contain lengths for the dma transfer and
  *    locations for the metadata writeback to happen.
  *
- * 3. We'll allocate a single large DMA addressible buffer
+ * 3. We'll allocate multiple large DMA addressible buffers
  *    to hold the final pixels and audio. These will be references
- *    by the descriptors
- *
- *    For each descriptor (6 of) we allocate a large buffer to contain the entire image
- *
- *    picbuf1 1fa400 length
- *    picbuf2 1fa400 length
- *    picbuf3 1fa400 length
- *    picbuf4 1fa400 length
- *    picbuf5 1fa400 length
- *    picbuf6 1fa400 length
- *
- *    Update each descriptor to point to the correct picture buffer and provide
- *    a dma transfer length.
- *
- *    0x0000  descriptor1  len, dma address of picbuf1, addr of descriptor2
- *    0x0020  descriptor2  len, dma address of picbuf2, addr of descriptor3
- *    0x0040  descriptor3  len, dma address of picbuf3, addr of descriptor4
- *    0x0060  descriptor4  len, dma address of picbuf4, addr of descriptor5
- *    0x0080  descriptor5  len, dma address of picbuf5, addr of descriptor6
- *    0x00a0  descriptor6  len, dma address of picbuf6, addr of descriptor1
- *    0x1000  descriptor1 writeback metadata location
- *    0x1020  descriptor2 writeback metadata location
- *    0x1030  descriptor3 writeback metadata location
- *    0x1040  descriptor4 writeback metadata location
- *    0x1050  descriptor5 writeback metadata location
- *    0x1060  descriptor6 writeback metadata location
+ *    by the descriptors in each chain. A chain is expected to
+ *    contain a single video picture, and create multiple
+ *    buffers and point multiple descriptors at the buffers
+ *    in order that the DMA controller can DMA the data into RAM.
  *
  * Return < 0 on error
  * Return number of buffers we copyinto from dma into user buffers.
@@ -306,8 +294,9 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ch->numDescriptorChains = 4;
 		ch->buf_size = 0x1c2000; /* 1280x 720p*/
-		ch->buf_size = 0x3f4800; /* 1920x1080p */
-		ch->buf_size = 0xfd2000; /* 3840x2160p */
+		//ch->buf_size = 0x3f4800; /* 1920x1080p */
+		//ch->buf_size = 0xfd2000; /* 3840x2160p */
+printk("Allocating channel for size %d\n", ch->buf_size);
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
 		ch->numDescriptorChains = 4;
