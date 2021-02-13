@@ -55,7 +55,13 @@
 #define SC0710_VERSION_CODE KERNEL_VERSION(1, 0, 0)
 
 #define SC0710_MAX_CHANNELS 2
-#define SC0710_MAX_CHANNEL_DESCRIPTORS 8
+
+/* A chain contains 1..SC0710_MAX_CHAIN_DESCRIPTORS descriptors,
+ * multiple DMA allocations and multiple descriptors to
+ * target the buffer pieces.
+ */
+#define SC0710_MAX_CHANNEL_DESCRIPTOR_CHAINS 4
+#define SC0710_MAX_CHAIN_DESCRIPTORS 8
 
 #define UNSET (-1U)
 
@@ -139,6 +145,29 @@ enum sc0710_channel_state_e
 	STATE_RUNNING
 };
 
+/* Take the size of an ideal DMA transfer (say, the size of a 4K image 3840 * 2 * 2160 bytes).
+ * Fragment this into 4MB PCI allocations, so for 4K we have:
+ * allocsegment = 4 * 1048576 = 4194304
+ * 4K = 16588800
+ * allocations = 4K / allocsegment
+ */
+struct sc0710_dma_descriptor_chain
+{
+	int         enabled;
+	int         total_transfer_size;
+
+	/* Multiple DMA allocations holding an entire video frame, or audio buffer. */
+	u32                          numAllocations;
+	struct sc0710_dma_descriptor_chain_allocation {
+                int                           enabled;
+		struct sc0710_dma_descriptor *desc;
+		u32                           buf_size; /* PCI allocation size in bytes, of each allocation */
+		u64                          *buf_cpu;  /* Virtual address */
+		dma_addr_t                    buf_dma;  /* Physical address - accessible to the PCIe endpoint */
+		u32                          *wbm[2];   /* Write back metadata where we can monitor descriptor completion */
+	} allocations[SC0710_MAX_CHAIN_DESCRIPTORS];
+};
+
 struct sc0710_dma_channel
 {
 	struct sc0710_dev           *dev;
@@ -148,9 +177,15 @@ struct sc0710_dma_channel
 	enum sc0710_channel_type_e   mediatype;
 	enum sc0710_channel_state_e  state;
 
+	/* A single page hold the entire descriptor list for a chain. */
+	u32         pt_size; /* PCI allocation size in bytes */
+	u64        *pt_cpu;  /* Virtual address */
+	dma_addr_t  pt_dma;  /* Physical address - accessible to the PCIe endpoint */
+
 	struct mutex                 lock;
-	u32                          numDescriptors;
-	struct sc0710_dma_descriptor descs[SC0710_MAX_CHANNEL_DESCRIPTORS];
+	u32                          numDescriptorChains;
+	u32                          buf_size;
+	struct sc0710_dma_descriptor_chain chains[SC0710_MAX_CHANNEL_DESCRIPTOR_CHAINS];
 
 	/* DMA Controller PCI BAR offsets */
 	u32                          register_dma_base;
@@ -169,16 +204,6 @@ struct sc0710_dma_channel
 	u32                          reg_sg_start_h;
 	u32                          reg_sg_adj;
 	u32                          reg_sg_credits;
-
-	/* A single page hold the entire descriptor list for a channel. */
-	u32                          pt_size; /* PCI allocation size in bytes */
-	u64                         *pt_cpu;  /* Virtual address */
-	dma_addr_t                   pt_dma;  /* Physical address - accessible to the PCIe endpoint */
-
-	/* A single large allocation holds an entire video frame, or audio buffer. */
-	u32                          buf_size; /* PCI allocation size in bytes */
-	u64                         *buf_cpu[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Virtual address */
-	dma_addr_t                   buf_dma[SC0710_MAX_CHANNEL_DESCRIPTORS];  /* Physical address - accessible to the PCIe endpoint */
 
 	/* DMA related items we need to track. */
 	u32                          dma_completed_descriptor_count_last;
@@ -341,3 +366,13 @@ s64  sc0710_things_per_second_query(struct sc0710_things_per_second *tps);
 void sc0710_video_unregister(struct sc0710_dma_channel *ch);
 int  sc0710_video_register(struct sc0710_dma_channel *ch);
 
+/* -dma-chain.c */
+void sc0710_dma_chain_free(struct sc0710_dma_channel *ch, int nr);
+int  sc0710_dma_chain_alloc(struct sc0710_dma_channel *ch, int nr, int transfer_size);
+void sc0710_dma_chain_dump(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain, int nr);
+int sc0710_dma_chain_dq_to_ptr(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain, u8 *dst, int dstlen);
+
+/* -dma-chains.c */
+void sc0710_dma_chains_free(struct sc0710_dma_channel *ch);
+int  sc0710_dma_chains_alloc(struct sc0710_dma_channel *ch, int total_transfer_size);
+void sc0710_dma_chains_dump(struct sc0710_dma_channel *ch);

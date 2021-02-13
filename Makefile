@@ -1,6 +1,7 @@
 sc0710-objs := \
 	sc0710-cards.o sc0710-core.o sc0710-i2c.o \
 	sc0710-formats.o sc0710-dma-channel.o sc0710-dma-channels.o \
+	sc0710-dma-chains.o sc0710-dma-chain.o \
 	sc0710-things-per-second.o sc0710-video.o
 
 obj-m += sc0710.o
@@ -53,6 +54,6 @@ stream1080p:
 		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
 
 stream2160p:
-	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 3840x2160 -i /dev/video0 \
+	ffmpeg -r 30 -f rawvideo -pixel_format yuyv422 -video_size 3840x2160 -i /dev/video0 \
 		-vcodec libx264 -preset ultrafast -tune zerolatency \
 		-f mpegts udp://192.168.0.66:4001?pkt_size=1316

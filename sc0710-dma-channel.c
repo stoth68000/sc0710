@@ -113,12 +113,13 @@ static int dma_channel_debug = 2;
  * Return < 0 on error
  * Return number of buffers we copyinto from dma into user buffers.
  */
-static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor *desc, int descrNr)
+static void sc0710_dma_dequeue(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain)
 {
 	struct sc0710_dev *dev = ch->dev;
 	struct sc0710_buffer *vb_buf = NULL;
 	unsigned long flags;
 	u8 *dst = NULL;
+	int len;
 
 	spin_lock_irqsave(&ch->v4l2_capture_list_lock, flags);
 
@@ -140,9 +141,12 @@ static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_d
 		}
 
 		/* Copy dma data to user buffer. */
-		dprintk(1, "%s() copying %lu bytes\n", __func__, vb_buf->vb.size);
+		dprintk(3, "%s() copying %lu bytes\n", __func__, vb_buf->vb.size);
 
-		memcpy(dst, ch->buf_cpu[descrNr], vb_buf->vb.size);
+		len = sc0710_dma_chain_dq_to_ptr(ch, chain, dst, vb_buf->vb.size);
+		if (len != vb_buf->vb.size) {
+			printk("%s() error copying %lu bytes, copied %d\n", __func__, vb_buf->vb.size, len);
+		}
 
 		do_gettimeofday(&vb_buf->vb.ts);
 		list_del(&vb_buf->vb.queue);
@@ -164,191 +168,112 @@ static void sc0710_dma_pt_dequeue(struct sc0710_dma_channel *ch, struct sc0710_d
 
 int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 {
-	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
 	struct sc0710_dev *dev = ch->dev;
-	int i, processed = 0;
-	u32 v, ctrl;
+	struct sc0710_dma_descriptor_chain_allocation *dca;
+	struct sc0710_dma_descriptor_chain *chain;
 	u32 wbm[2];
-	u32 *p = (u32 *)ch->pt_cpu;
-	u32 q;
-	u16 *ptr = (u16 *)ch->buf_cpu;
-	int dequeueItem = 0;
-	int j;
-
-	p += (PAGE_SIZE / 4);
+	u32 v;
+	int i;
 
 	if (ch->enabled == 0)
 		return -1;
 
 	v = sc_read(ch->dev, 1, ch->reg_dma_completed_descriptor_count);
+
 	if (v == ch->dma_completed_descriptor_count_last) {
 		/* No new buffers since our last service call. */
-		return processed;
+		return 0;
 	}
 
-	dprintk(3, "ch#%d    was %d now %d\n", ch->nr, ch->dma_completed_descriptor_count_last, v);
-
-	ch->dma_completed_descriptor_count_last = v;
-
-	/* Check all the descriptors and see which on finished. */
-	for (i = 0; i < ch->numDescriptors; i++) {
-		dequeueItem = 0;
-		ctrl = desc->control;
-
-		q = (PAGE_SIZE + (i * (0x20))) / sizeof(u32);
-
-		wbm[0] = *(p + 0);
-		wbm[1] = *(p + 1);
-
-		if (wbm[0] || wbm[1]) {
-			dequeueItem = 1;
-			ptr = (u16 *)ch->buf_cpu[i];
-		}
-
-#if 0
-		printk("%s ch#%d    [%02d] %08x - wbm %08x %08x   q: %08x  p: %p%s\n",
-			ch->dev->name,
-			ch->nr,
-			i,
-			desc->control,
-			wbm[0],
-			wbm[1], q, p, dequeueItem ? " (DQ)" : "");
-#endif
-
-		if (dequeueItem)
-		{
-			static int domore = 0;
-
-			/* TODO: dequeue this descriptor picbuf */
-			dprintk(3, "%s ch#%d    [%02d] %08x - wbm %08x %08x   q: %08x  p: %p%s\n",
-				ch->dev->name,
-				ch->nr,
-				i,
-				desc->control,
-				wbm[0],
-				wbm[1], q, p, dequeueItem ? " (DQ)" : "");
-
-			if (dma_channel_debug > 1) {
-				if (domore++ < 8) {
-					for (j = 0; j < 200; j++) {
-						if (j % 16 == 0)
-							printk("\n%p: ", ptr + j);
-						printk(" %04x", *(ptr + j));
-					}
-					printk("\n");
-				}
-			}
-
-			sc0710_things_per_second_update(&ch->bitsPerSecond, wbm[1] * 8);
-			sc0710_things_per_second_update(&ch->descPerSecond, 1);
-
-			if (ch->mediatype == CHTYPE_VIDEO) {
-				sc0710_dma_pt_dequeue(ch, desc, i);
-			}
-
-			/* Reset the metadat so we don't attempt to process this during the
- 			 * next service call.
- 			 */
-			*(p + 0) = 0;
-			*(p + 1) = 0;
-		}
-		p += 8;
-
-		desc++;
-	}
-
-	return processed;
-}
-
-void sc0710_dma_channel_descriptors_dump(struct sc0710_dma_channel *ch)
-{
-	int i;
-	struct sc0710_dma_descriptor *desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
-
-	printk("%s  pt_cpu %p  pt_dma %llx  pt_size %d\n",
-		ch->dev->name,
-		ch->pt_cpu, ch->pt_dma, ch->pt_size);
-
-	/* Create a set of linked scatter gather descriptors and allocate
-	 * supporting dma buffers for the PCIe endpoint to burst into.
-	 */
-	for (i = 0; i < ch->numDescriptors; i++) {
-		printk("%s buf_cpu %p buf_dma %llx buf_size %d\n",
-			ch->dev->name,
-			ch->buf_cpu[i], ch->buf_dma[i], ch->buf_size);
-	}
-	for (i = 0; i < ch->numDescriptors; i++) {
-		printk("%s         [%02d] %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			ch->dev->name,
-			i,
-			desc->control,
-			desc->lengthBytes,
-			desc->src_l,
-			desc->src_h,
-			desc->dst_l,
-			desc->dst_h,
-			desc->next_l,
-			desc->next_h);
-		desc++;
-	}
-}
-
-static void sc0710_dma_channel_descriptors_free(struct sc0710_dma_channel *ch)
-{
-	int i;
-
-	pci_free_consistent(ch->dev->pci, ch->pt_size, ch->pt_cpu, ch->pt_dma);
-
-	for (i = 0; i < ch->numDescriptors; i++) {
-		pci_free_consistent(ch->dev->pci, ch->buf_size, ch->buf_cpu[i], ch->buf_dma[i]);
-	}
-}
-
-static int sc0710_dma_channel_descriptors_alloc(struct sc0710_dma_channel *ch)
-{
-	struct sc0710_dma_descriptor *desc;
-	int i;
-
-	/* allocate the descriptor table ram, its contigious. */
-	ch->pt_cpu = pci_alloc_consistent(ch->dev->pci, ch->pt_size, &ch->pt_dma);
-	if (ch->pt_cpu == 0)
+	if (ch->mediatype != CHTYPE_VIDEO)
 		return -1;
 
-	memset(ch->pt_cpu, 0, ch->pt_size);
+	dprintk(3, "ch#%d    was %d now %d\n", ch->nr, ch->dma_completed_descriptor_count_last, v);
+	ch->dma_completed_descriptor_count_last = v;
 
-	desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
+	for (i = 0; i < ch->numDescriptorChains; i++) {
+		chain = &ch->chains[i];
 
-	/* Create a set of linked scatter gather descriptors and allocate
-	 * supporting dma buffers for the PCIe endpoint to burst into.
-	 */
-	for (i = 0; i < ch->numDescriptors; i++) {
-		ch->buf_cpu[i] = pci_alloc_consistent(ch->dev->pci, ch->buf_size, &ch->buf_dma[i]);
-		if (!ch->buf_cpu[i]) {
-			return -1;
+		/* Last allocated SG buffer in the chain. */
+		dca = &chain->allocations[ chain->numAllocations - 1 ];
+
+		wbm[0] = *dca->wbm[0];
+		wbm[1] = *dca->wbm[1];
+
+		/* If the write back metadata is set, we know the chain is complete. */
+		if (wbm[0] && wbm[1]) {
+
+			if (dma_channel_debug > 2) {
+				printk("%s ch#%d    [%02d] %08x - wbm %08x %08x (DQ) segs: %d\n",
+					ch->dev->name,
+					ch->nr,
+					i,
+					dca->desc->control,
+					wbm[0],
+					wbm[1], chain->numAllocations);
+			}
+
+			sc0710_things_per_second_update(&ch->bitsPerSecond, chain->total_transfer_size * 8);
+			sc0710_things_per_second_update(&ch->descPerSecond, chain->numAllocations);
+
+			if (ch->mediatype == CHTYPE_VIDEO) {
+				sc0710_dma_dequeue(ch, chain);
+			}
+
+			/* Reset the descriptor state so we know when it's complete next time. */
+			*(dca->wbm[0]) = 0;
+			*(dca->wbm[1]) = 0;
 		}
-
-		desc->control = 0xAD4B0000;
-		//desc->control |= (1 << 1); /* Enabled 'Completed' bit */
-		desc->lengthBytes = ch->buf_size;
-		desc->src_l = (u64)ch->pt_dma + PAGE_SIZE + (i * 0x20);
-		desc->src_h = ((u64)ch->pt_dma + PAGE_SIZE + (i * 0x20)) >> 32;
-		desc->dst_l = (u64)ch->buf_dma[i];
-		desc->dst_h = (u64)ch->buf_dma[i] >> 32;
-
-		if (i + 1 == ch->numDescriptors) {
-			/* Last descriptor needs to point to the first. */
-			desc->next_l = (u64)ch->pt_dma;
-			desc->next_h = (u64)ch->pt_dma >> 32;
-		} else {
-			/* other descriptors point to the next descriptor in the chain. */
-			desc->next_l = (u64)ch->pt_dma + ((i + 1) * sizeof(*desc));
-			desc->next_h = ((u64)ch->pt_dma + ((i + 1) * sizeof(*desc))) >> 32;
-		}
-
-		desc++;
 	}
 
-	return 0;
+	return 0; /* Success */
+}
+
+/* Build the scatter gather table chaining all of the chains and decriptors together. */
+static int sc0710_dma_channel_chains_link(struct sc0710_dma_channel *ch)
+{
+	struct sc0710_dma_descriptor_chain *chain;
+	struct sc0710_dma_descriptor_chain_allocation *dca;
+	struct sc0710_dma_descriptor *pt_desc = (struct sc0710_dma_descriptor *)ch->pt_cpu;
+	dma_addr_t curr_tbl = ch->pt_dma;
+	dma_addr_t curr_wbm = ch->pt_dma + PAGE_SIZE;
+	int i, j;
+
+	/* Now that we have all of the dma allocations, we can update the descriptor tables with DMA io addresses. */
+	for (i = 0; i < ch->numDescriptorChains; i++) {
+		chain = &ch->chains[i];
+
+		for (j = 0; j < chain->numAllocations; j++) {
+			dca = &chain->allocations[j];
+
+			dca->desc = pt_desc++;
+
+			if ((i + 1 == ch->numDescriptorChains) && (j + 1 == chain->numAllocations)) {
+				/* Last descriptor in the last chains needs to point to the first desc in first chain. */
+				dca->desc->next_l = (u64)ch->pt_dma;
+				dca->desc->next_h = (u64)ch->pt_dma >> 32;
+			} else {
+				dca->desc->next_l = (u64)curr_tbl + sizeof(struct sc0710_dma_descriptor);
+				dca->desc->next_h = ((u64)curr_tbl + sizeof(struct sc0710_dma_descriptor)) >> 32;
+			}
+
+			dca->desc->control     = 0xAD4B0000;
+			dca->desc->lengthBytes = dca->buf_size;
+			dca->desc->src_l       = (u64)curr_wbm;
+			dca->desc->src_h       = (u64)curr_wbm >> 32;
+			dca->desc->dst_l       = (u64)dca->buf_dma;
+			dca->desc->dst_h       = (u64)dca->buf_dma >> 32;
+
+			dca->wbm[0]            = bus_to_virt(curr_wbm);
+			dca->wbm[1]            = bus_to_virt(curr_wbm) + sizeof(u32);
+
+			curr_tbl += sizeof(struct sc0710_dma_descriptor);
+			curr_wbm += sizeof(struct sc0710_dma_descriptor);
+		}
+
+	}
+
+	return 0; /* Success */
 }
 
 int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction,
@@ -379,21 +304,28 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	sc0710_things_per_second_reset(&ch->descPerSecond);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		ch->numDescriptors = 6;
+		ch->numDescriptorChains = 4;
 		ch->buf_size = 0x1c2000; /* 1280x 720p*/
 		ch->buf_size = 0x3f4800; /* 1920x1080p */
 		ch->buf_size = 0xfd2000; /* 3840x2160p */
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
-		ch->numDescriptors = 4;
+		ch->numDescriptorChains = 4;
 		ch->buf_size = 0x4000;
 	} else {
-		ch->numDescriptors = 0;
+		ch->numDescriptorChains = 0;
 	}
 
 	/* Page table defaults. */
 	/* This assumed PAGE_SIZE is 4K */
+	/* allocate the descriptor table, its contigious. */
 	ch->pt_size = PAGE_SIZE * 2;
+
+	ch->pt_cpu = pci_alloc_consistent(dev->pci, ch->pt_size, &ch->pt_dma);
+	if (ch->pt_cpu == 0)
+		return -1;
+
+	memset(ch->pt_cpu, 0, ch->pt_size);
 
 	/* register offsets use by the channel and dma descriptor register writes/reads. */
 
@@ -415,11 +347,12 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
         ch->reg_sg_adj = ch->register_sg_base + 0x88;
         ch->reg_sg_credits = ch->register_sg_base + 0x8c;
 
-	sc0710_dma_channel_descriptors_alloc(ch);
+	sc0710_dma_chains_alloc(ch, ch->buf_size);
 
 	printk(KERN_INFO "%s channel %d allocated\n", dev->name, nr);
 
-	sc0710_dma_channel_descriptors_dump(ch);
+	sc0710_dma_channel_chains_link(ch);
+	sc0710_dma_chains_dump(ch);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ret = sc0710_video_register(ch);
@@ -443,7 +376,7 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 		sc0710_video_unregister(ch);
 	}
 
-	sc0710_dma_channel_descriptors_free(ch);
+	sc0710_dma_chains_free(ch);
 
 	printk(KERN_INFO "%s channel %d deallocated\n", dev->name, nr);
 }
