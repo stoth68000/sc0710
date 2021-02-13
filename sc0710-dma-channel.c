@@ -32,7 +32,7 @@
 
 #include "sc0710.h"
 
-static int dma_channel_debug = 0;
+static int dma_channel_debug = 2;
 #define dprintk(level, fmt, arg...)\
         do { if (dma_channel_debug >= level)\
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
@@ -380,7 +380,9 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ch->numDescriptors = 6;
-		ch->buf_size = 0x1c2000;
+		ch->buf_size = 0x1c2000; /* 1280x 720p*/
+		ch->buf_size = 0x3f4800; /* 1920x1080p */
+		ch->buf_size = 0xfd2000; /* 3840x2160p */
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
 		ch->numDescriptors = 4;
