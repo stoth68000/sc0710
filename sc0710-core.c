@@ -500,6 +500,8 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 
 	sc0710_dma_channels_alloc(dev);
 
+	sc0710_i2c_initialize(dev);
+
 	/* Put this in a global list so we can track multiple boards */
 	mutex_lock(&devlist);
 	list_add_tail(&dev->devlist, &sc0710_devlist);
