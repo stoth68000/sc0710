@@ -27,7 +27,24 @@
 
 #include "sc0710.h"
 
-#define I2C_DEV__ARM_MCU (0x64)
+#define I2C_DEV__ARM_MCU (0x32 << 1)
+#define I2C_DEV__UNKNOWN (0x33 << 1)
+
+static int didack(struct sc0710_dev *dev)
+{
+	u32 v;
+	int cnt = 16;
+
+	while (cnt-- > 0) {
+		v = sc_read(dev, 0, BAR0_3104);
+		if ((v == 0x44) || (v == 0xc0)) {
+			return 1; /* device Ack'd */
+		}
+		udelay(64);
+	}
+
+	return 0; /* No Ack */
+}
 
 static u8 busread(struct sc0710_dev *dev)
 {
@@ -45,6 +62,33 @@ static u8 busread(struct sc0710_dev *dev)
 	v = sc_read(dev, 0, BAR0_310C);
 //printk("readbus ret 0x%02x\n", v);
 	return v;
+}
+
+/* Assumes 8 bit device address and 8 bit sub address. */
+static int sc0710_i2c_write(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf, int wlen)
+{
+	int i;
+	u32 v;
+
+	/* Write out to the i2c bus master a reset, then write length and device address */
+	sc_write(dev, 0, BAR0_3100, 0x00000002); /* TX_FIFO Reset */
+	sc_write(dev, 0, BAR0_3100, 0x00000001); /* AXI IIC Enable */
+	sc_write(dev, 0, BAR0_3108, 0x00000000 | (1 << 8) /* Start Bit */ | devaddr8bit);
+
+	/* Wait for the device ack */
+	if (didack(dev) == 0)
+		return -EIO;
+
+	for (i = 1; i < wlen; i++) {
+		v = 0x00000000 | *(wbuf + i);
+		if (i == (wlen - 1))
+			v |= (1 << 9); /* Stop Bit */
+		sc_write(dev, 0, BAR0_3108, v);
+		if (didack(dev) == 0)
+			return -EIO;
+	}
+
+	return 0; /* Success */
 }
 
 static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf, int wlen, u8 *rbuf, int rlen)
@@ -237,6 +281,21 @@ int sc0710_i2c_read_procamp(struct sc0710_dev *dev)
 		dev->saturation,
 		dev->hue);
 
+	return 0; /* Success */
+}
+
+int sc0710_i2c_cfg_unknownpart(struct sc0710_dev *dev)
+{
+	int ret;
+	u8 wbuf[5] = { 0xab, 0x03, 0x12, 0x34, 0x57 };
+
+	ret = sc0710_i2c_write(dev, I2C_DEV__UNKNOWN, &wbuf[0], sizeof(wbuf));
+	if (ret < 0) {
+		printk("%s ret = %d\n", __func__, ret);
+		return -1;
+	}
+
+	printk("%s() success\n", __func__);
 	return 0; /* Success */
 }
 
