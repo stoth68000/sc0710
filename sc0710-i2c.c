@@ -48,14 +48,14 @@ static int didack(struct sc0710_dev *dev)
 static u8 busread(struct sc0710_dev *dev)
 {
 	u32 v;
-	int cnt = 16;
+	int cnt = 32;
 
 	while (cnt-- > 0) {
 		v = sc_read(dev, 0, BAR0_3104);
 //printk("readbus %08x\n", v);
 		if ((v == 0x0000008c) || (v == 0x000000ac))
 			break;
-		udelay(64);
+		udelay(128);
 	}
 
 	v = sc_read(dev, 0, BAR0_310C);
