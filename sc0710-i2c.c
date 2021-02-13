@@ -283,7 +283,8 @@ int sc0710_i2c_read_procamp(struct sc0710_dev *dev)
 	return 0; /* Success */
 }
 
-int sc0710_i2c_cfg_unknownpart(struct sc0710_dev *dev)
+#if 0
+static int sc0710_i2c_cfg_unknownpart(struct sc0710_dev *dev)
 {
 	int ret;
 	u8 wbuf[5] = { 0xab, 0x03, 0x12, 0x34, 0x57 };
@@ -295,6 +296,29 @@ int sc0710_i2c_cfg_unknownpart(struct sc0710_dev *dev)
 	}
 
 	printk("%s() success\n", __func__);
+	return 0; /* Success */
+}
+
+static int sc0710_i2c_cfg_unknownpart2(struct sc0710_dev *dev)
+{
+	int ret;
+	u8 wbuf[2] = { 0x10, 0x01 };
+
+	ret = sc0710_i2c_write(dev, I2C_DEV__ARM_MCU, &wbuf[0], sizeof(wbuf));
+	if (ret < 0) {
+		printk("%s ret = %d\n", __func__, ret);
+		return -1;
+	}
+
+	printk("%s() success\n", __func__);
+	return 0; /* Success */
+}
+#endif
+
+int sc0710_i2c_initialize(struct sc0710_dev *dev)
+{
+	//sc0710_i2c_cfg_unknownpart2(dev);
+
 	return 0; /* Success */
 }
 
