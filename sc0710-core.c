@@ -40,9 +40,9 @@ unsigned int thread_dma_active = 1;
 module_param(thread_dma_active, int, 0644);
 MODULE_PARM_DESC(thread_dma_active, "should dma thread run");
 
-unsigned int thread_hdmi_poll_interval_ms = 100;
+unsigned int thread_hdmi_poll_interval_ms = 200;
 module_param(thread_hdmi_poll_interval_ms, int, 0644);
-MODULE_PARM_DESC(thread_hdmi_poll_interval_ms, "have the kernel thread poll hdmi every N ms (def:100)");
+MODULE_PARM_DESC(thread_hdmi_poll_interval_ms, "have the kernel thread poll hdmi every N ms (def:200)");
 
 unsigned int thread_dma_poll_interval_ms = 2;
 module_param(thread_dma_poll_interval_ms, int, 0644);
