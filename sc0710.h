@@ -302,12 +302,12 @@ void sc_set(struct sc0710_dev *dev, int bar, u32 reg, u32 bit);
 void sc_clr(struct sc0710_dev *dev, int bar, u32 reg, u32 bit);
 
 /* -i2c.c */
+int sc0710_i2c_initialize(struct sc0710_dev *dev);
 int sc0710_i2c_hdmi_status_dump(struct sc0710_dev *dev);
 int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev);
 int sc0710_i2c_read_status2(struct sc0710_dev *dev);
 int sc0710_i2c_read_status3(struct sc0710_dev *dev);
 int sc0710_i2c_read_procamp(struct sc0710_dev *dev);
-int sc0710_i2c_cfg_unknownpart(struct sc0710_dev *dev);
 
 /* -formats.c */
 void sc0710_format_initialize(void);
