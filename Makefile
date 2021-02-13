@@ -42,7 +42,17 @@ encode:
 	#ffmpeg -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 -vcodec libx264 -f mpegts encoder3.ts
 	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 -vcodec libx264 -f mpegts encoder0.ts
 
-stream:
+stream720p:
 	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 \
+		-vcodec libx264 -preset ultrafast -tune zerolatency \
+		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
+
+stream1080p:
+	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1920x1080 -i /dev/video0 \
+		-vcodec libx264 -preset ultrafast -tune zerolatency \
+		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
+
+stream2160p:
+	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 3840x2160 -i /dev/video0 \
 		-vcodec libx264 -preset ultrafast -tune zerolatency \
 		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
