@@ -132,7 +132,10 @@ int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 	u8 rbuf[0x1a] = { 0    /* response buffer */};
 
 	ret = sc0710_i2c_writeread(dev, I2C_DEV__ARM_MCU, &wbuf[0], sizeof(wbuf), &rbuf[0], sizeof(rbuf));
-	printk("%s ret = %d\n", __func__, ret);
+	if (ret < 0) {
+		printk("%s ret = %d\n", __func__, ret);
+		return -1;
+	}
 
 	printk("%s    hdmi: ", dev->name);
 	for (i = 0; i < sizeof(rbuf); i++)
