@@ -108,9 +108,9 @@ static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf
 	 *                                             <= 562==> <=2200==> <= 540==> <=1920==>         ^ bit 1 flipped - interlaced?
 	 */
 
-	sc_write(dev, 0, BAR0_3100, 0x00000002);
-	sc_write(dev, 0, BAR0_3100, 0x00000001);
-	sc_write(dev, 0, BAR0_3108, 0x00000000 | (wlen << 8) | i2c_devaddr);
+	sc_write(dev, 0, BAR0_3100, 0x00000002); /* TX_FIFO Reset */
+	sc_write(dev, 0, BAR0_3100, 0x00000001); /* AXI IIC Enable */
+	sc_write(dev, 0, BAR0_3108, 0x00000000 | (1 << 8) /* Start Bit */ | i2c_devaddr);
 
 	/* Wait for the device ack */
 	while (cnt > 0) {
@@ -141,12 +141,12 @@ static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf
 	}
 	//dprintk(0, "Read 3104 %08x at cnt %d -- c4?\n", v, cnt);
 
-	udelay(2000); // pkt 15162
+	msleep(1); // pkt 15162
 	sc_write(dev, 0, BAR0_3120, 0x0000000f);
-	sc_write(dev, 0, BAR0_3100, 0x00000002);
+	sc_write(dev, 0, BAR0_3100, 0x00000002); /* TX_FIFO Reset */
 	sc_write(dev, 0, BAR0_3100, 0x00000000);
-	sc_write(dev, 0, BAR0_3108, 0x00000100 | (i2c_devaddr | 1)); /* Read from 0x65 */
-	sc_write(dev, 0, BAR0_3108, 0x00000200 | i2c_readlen);
+	sc_write(dev, 0, BAR0_3108, 0x00000000 | (1 << 8) /* Start Bit */ | (i2c_devaddr | 1)); /* Read from 0x65 */
+	sc_write(dev, 0, BAR0_3108, 0x00000000 | (1 << 9) /* Stop Bit */ | i2c_readlen);
 	sc_write(dev, 0, BAR0_3100, 0x00000001);
 
 	/* Read the reply */
