@@ -100,6 +100,8 @@ void sc0710_dma_chain_free(struct sc0710_dma_channel *ch, int nr)
 	struct sc0710_dma_descriptor_chain_allocation *dca = &chain->allocations[0];
 	int i;
 
+	dprintk(1, "%s(ch#%d)\n", __func__, nr);
+
 	chain->enabled = 0;
 
 	for (i = 0; i < chain->numAllocations; i++) {
