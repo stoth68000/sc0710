@@ -39,7 +39,7 @@ static u8 busread(struct sc0710_dev *dev)
 //printk("readbus %08x\n", v);
 		if ((v == 0x0000008c) || (v == 0x000000ac))
 			break;
-		udelay(500);
+		udelay(64);
 	}
 
 	v = sc_read(dev, 0, BAR0_310C);
