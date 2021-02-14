@@ -35,7 +35,6 @@ int sc0710_audio_deliver_samples(struct sc0710_dev *dev, struct sc0710_dma_chann
 	struct sc0710_audio_dev *chip;
 	struct snd_pcm_substream *substream;
 	struct snd_pcm_runtime *runtime;
-	int period_elapsed = 0;
 	u8 *ptr = (u8 *)buf;
 	u8 *dst;
 	int i;
@@ -85,6 +84,7 @@ int sc0710_audio_deliver_samples(struct sc0710_dev *dev, struct sc0710_dma_chann
 	 *    L1  R1  L2  R2  L3  R3  L4  R4
 	 *   s16 s16 s16 s16 s16 s16 s16 s16 
 	 * Only Pair L1/R1 will be value, the remaining should be ignored.
+	 * Push only L1/R1 into the sound system.
 	 */
 
 	dst = (u8 *)runtime->dma_area + (chip->buffer_ptr * 4);
@@ -119,22 +119,10 @@ int sc0710_audio_deliver_samples(struct sc0710_dev *dev, struct sc0710_dma_chann
 		chip->buffer_ptr++;
 	}
 
-	snd_pcm_stream_lock(substream);
-	snd_pcm_stream_unlock(substream);
-
-#if 0
-	if (chip->period_pos >= runtime->period_size) {
-		chip->period_pos -= runtime->period_size;
-		period_elapsed = 1;
-	}
-	//if (period_elapsed)
-#endif
+	//snd_pcm_stream_lock(substream);
+	//snd_pcm_stream_unlock(substream);
 
 	snd_pcm_period_elapsed(substream);
-
-	dprintk(1, "%s() wrote %d samples, period elapsed %d rt buf size: %d, %d\n", __func__, samplesPerChannel, period_elapsed,
-		runtime->buffer_size,
-		chip->buffer_ptr);
 
 	return 0; /* Success */
 }
