@@ -54,9 +54,15 @@ will emerge and users will not be expected to download this entire repo, with hu
 analyzer traces, random notes - just to use the driver.
 
 # Status
-* Feb 13 2021 - Overhauled the scatter gather subsystem to support 4k video.
 * Feb 14 2021 - Added audio support, PCM 16bit 48KHz.
 * Feb 14 2021 - Driver is usable for certain resolutions for video and audio capture via ffmpeg.
+* Feb 13 2021 - Overhauled the scatter gather subsystem to support 4k video.
+* Feb 11 2021 - Firest every colorbar still iage captured via the driver.
+
+# TODO
+* Test/Support HDR 10bit.
+* Intermittent issue during capture, possible short video frame, casuses ffmpeg to error and stall.
+* Dynamically adjust the dma allocations prior to capture start, currently fixed to 1080p60
 
 # Comments / Support
 
