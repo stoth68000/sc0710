@@ -261,6 +261,8 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 				sc0710_things_per_second_query(&ch->bitsPerSecond) / 1000000 / 8);
 			seq_printf(m, "    descr ps: %lld\n",
 				sc0710_things_per_second_query(&ch->descPerSecond));
+			seq_printf(m, "  aud sam ps: %lld\n",
+				sc0710_things_per_second_query(&ch->audioSamplesPerSecond));
 		}
 
 	}

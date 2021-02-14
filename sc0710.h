@@ -45,6 +45,14 @@
 #include <media/tveeprom.h>
 #include <media/videobuf-vmalloc.h>
 #include <media/rc-core.h>
+#include <sound/core.h>
+#include <sound/pcm.h>
+#include <sound/pcm_params.h>
+#include <sound/control.h>
+#include <sound/initval.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
+#include <sound/tlv.h>
+#endif
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
@@ -211,7 +219,9 @@ struct sc0710_dma_channel
 	/* Statistics */
 	struct sc0710_things_per_second bitsPerSecond;
 	struct sc0710_things_per_second descPerSecond;
+	struct sc0710_things_per_second audioSamplesPerSecond;
 
+	/* Channel 0 */
 	/* V4L2 */
 	struct video_device         *v4l_device;
 	spinlock_t                   slock;
@@ -221,6 +231,9 @@ struct sc0710_dma_channel
 	struct list_head             v4l2_capture_list;
 	struct timer_list            timeout;
 	u32                          videousers;
+
+	/* Channel 1 */
+	struct sc0710_audio_dev     *audio_dev;
 };
 
 struct sc0710_i2c {
@@ -245,6 +258,14 @@ struct sc0710_format
 	u32   depth; /* bits */
 	u32   framesize; /* bytes */
 	char *name;
+};
+
+struct sc0710_audio_dev
+{
+	struct sc0710_dev         *dev;
+	struct snd_pcm_substream  *substream;
+	struct  snd_card          *card;
+	snd_pcm_uframes_t          buffer_ptr;
 };
 
 struct sc0710_dev {
@@ -376,3 +397,11 @@ int sc0710_dma_chain_dq_to_ptr(struct sc0710_dma_channel *ch, struct sc0710_dma_
 void sc0710_dma_chains_free(struct sc0710_dma_channel *ch);
 int  sc0710_dma_chains_alloc(struct sc0710_dma_channel *ch, int total_transfer_size);
 void sc0710_dma_chains_dump(struct sc0710_dma_channel *ch);
+
+/* -audio.c */
+int  sc0710_audio_register(struct sc0710_dev *dev);
+void sc0710_audio_unregister(struct sc0710_dev *dev);
+int  sc0710_audio_deliver_samples(struct sc0710_dev *dev, struct sc0710_dma_channel *ch,
+        const u8 *buf, int bitdepth, int strideBytes, int channels, int samplesPerChannel);
+
+

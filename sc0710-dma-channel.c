@@ -101,7 +101,7 @@ static int dma_channel_debug = 2;
  * Return < 0 on error
  * Return number of buffers we copyinto from dma into user buffers.
  */
-static void sc0710_dma_dequeue(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain)
+static void sc0710_dma_dequeue_video(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain)
 {
 	struct sc0710_dev *dev = ch->dev;
 	struct sc0710_buffer *vb_buf = NULL;
@@ -154,6 +154,34 @@ static void sc0710_dma_dequeue(struct sc0710_dma_channel *ch, struct sc0710_dma_
 	spin_unlock_irqrestore(&ch->v4l2_capture_list_lock, flags);
 }
 
+static void sc0710_dma_dequeue_audio(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain)
+{
+	struct sc0710_dma_descriptor_chain_allocation *dca = &chain->allocations[0];
+	int samplesPerChannel;
+	int stride = 16;
+	int ret;
+	int i;
+
+	if (chain->numAllocations != 1) {
+		printk("%s() allocations should be one, dma issue?\n", __func__);
+	}
+
+	for (i = 0; i < chain->numAllocations; i++) {
+
+		samplesPerChannel = dca->buf_size / stride;
+
+		ret = sc0710_audio_deliver_samples(ch->dev, ch,
+			(const u8 *)dca->buf_cpu,
+			16,     /* bitwidth */
+			stride,
+			2,      /* channels */
+			samplesPerChannel);
+
+		dca++;
+	}
+
+}
+
 int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 {
 	struct sc0710_dev *dev = ch->dev;
@@ -172,9 +200,6 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 		/* No new buffers since our last service call. */
 		return 0;
 	}
-
-	if (ch->mediatype != CHTYPE_VIDEO)
-		return -1;
 
 	dprintk(3, "ch#%d    was %d now %d\n", ch->nr, ch->dma_completed_descriptor_count_last, v);
 	ch->dma_completed_descriptor_count_last = v;
@@ -205,7 +230,10 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 			sc0710_things_per_second_update(&ch->descPerSecond, chain->numAllocations);
 
 			if (ch->mediatype == CHTYPE_VIDEO) {
-				sc0710_dma_dequeue(ch, chain);
+				sc0710_dma_dequeue_video(ch, chain);
+			} else
+			if (ch->mediatype == CHTYPE_AUDIO) {
+				sc0710_dma_dequeue_audio(ch, chain);
 			}
 
 			/* Reset the descriptor state so we know when it's complete next time. */
@@ -290,11 +318,12 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	ch->state = STATE_STOPPED;
 	sc0710_things_per_second_reset(&ch->bitsPerSecond);
 	sc0710_things_per_second_reset(&ch->descPerSecond);
+	sc0710_things_per_second_reset(&ch->audioSamplesPerSecond);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ch->numDescriptorChains = 4;
 		ch->buf_size = 0x1c2000; /* 1280x 720p*/
-		//ch->buf_size = 0x3f4800; /* 1920x1080p */
+		ch->buf_size = 0x3f4800; /* 1920x1080p */
 		//ch->buf_size = 0xfd2000; /* 3840x2160p */
 printk("Allocating channel for size %d\n", ch->buf_size);
 	} else
@@ -346,6 +375,9 @@ printk("Allocating channel for size %d\n", ch->buf_size);
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ret = sc0710_video_register(ch);
 	}
+	if (ch->mediatype == CHTYPE_AUDIO) {
+		sc0710_audio_register(dev);
+	}
 
 	return 0; /* Success */
 };
@@ -363,6 +395,9 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		sc0710_video_unregister(ch);
+	}
+	if (ch->mediatype == CHTYPE_AUDIO) {
+		sc0710_audio_unregister(dev);
 	}
 
 	sc0710_dma_chains_free(ch);
