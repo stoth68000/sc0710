@@ -53,6 +53,11 @@ project progresses and the driver becomes usable, almost certainly, a new 'clean
 will emerge and users will not be expected to download this entire repo, with huge images,
 analyzer traces, random notes - just to use the driver.
 
+# Status
+* Feb 13 2021 - Overhauled the scatter gather subsystem to support 4k video.
+* Feb 14 2021 - Added audio support, PCM 16bit 48KHz.
+* Feb 14 2021 - Driver is usable for certain resolutions for video and audio capture via ffmpeg.
+
 # Comments / Support
 
 Email: stoth@kernellabs.com
