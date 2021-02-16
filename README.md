@@ -54,6 +54,8 @@ will emerge and users will not be expected to download this entire repo, with hu
 analyzer traces, random notes - just to use the driver.
 
 # Status
+* Feb 15 2021 - Detected colorimetry and colospace HDMI support.
+* Feb 15 2021 - Added basic DV Timing support to expose resolution / rate material through the v4l api.
 * Feb 14 2021 - Added audio support, PCM 16bit 48KHz.
 * Feb 14 2021 - Driver is usable for certain resolutions for video and audio capture via ffmpeg.
 * Feb 13 2021 - Overhauled the scatter gather subsystem to support 4k video.
