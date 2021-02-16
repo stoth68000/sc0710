@@ -233,6 +233,7 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 		sc0710_i2c_read_procamp(dev);
 
 		mutex_lock(&dev->signalMutex);
+		seq_printf(m, "         fmt: %p\n", dev->fmt);
 	        if (dev->locked) {
 			seq_printf(m, "        HDMI: %s -- %dx%d%c (%dx%d)\n",
 				dev->fmt ? dev->fmt->name : "UNDEFINED",
@@ -242,13 +243,14 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 		} else {
 			seq_printf(m, "        HDMI: no signal\n");
 		}
-		seq_printf(m, "         fmt: %p\n", dev->fmt);
 		mutex_unlock(&dev->signalMutex);
 
-		seq_printf(m, "     procamp: brightness %d\n", dev->brightness);
-		seq_printf(m, "     procamp: contrast %d\n", dev->contrast);
-		seq_printf(m, "     procamp: saturation %d\n", dev->saturation);
-		seq_printf(m, "     procamp: hue %d\n", dev->hue);
+		seq_printf(m, " colorimetry: %s\n", sc0710_colorimetry_ascii(dev->colorimetry));
+		seq_printf(m, "  colorspace: %s\n", sc0710_colorspace_ascii(dev->colorspace));
+		seq_printf(m, "     procamp: brightness  %d\n", dev->brightness);
+		seq_printf(m, "     procamp: contrast    %d\n", dev->contrast);
+		seq_printf(m, "     procamp: saturation  %d\n", dev->saturation);
+		seq_printf(m, "     procamp: hue         %d\n", dev->hue);
 
 		for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
 			ch = &dev->channel[i];
@@ -261,8 +263,11 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 				sc0710_things_per_second_query(&ch->bitsPerSecond) / 1000000 / 8);
 			seq_printf(m, "    descr ps: %lld\n",
 				sc0710_things_per_second_query(&ch->descPerSecond));
-			seq_printf(m, "  aud sam ps: %lld\n",
-				sc0710_things_per_second_query(&ch->audioSamplesPerSecond));
+
+			if (ch->mediatype == CHTYPE_AUDIO) {
+				seq_printf(m, "  aud sam ps: %lld\n",
+					sc0710_things_per_second_query(&ch->audioSamplesPerSecond) / 2);
+			}
 		}
 
 	}
@@ -422,6 +427,8 @@ static int sc0710_thread_hdmi_function(void *data)
 		mutex_lock(&dev->kthread_hdmi_lock);
 
 		sc0710_i2c_read_hdmi_status(dev);
+		//sc0710_i2c_read_status2(dev);
+		//sc0710_i2c_read_status3(dev);
 
 		mutex_unlock(&dev->kthread_hdmi_lock);
 	}

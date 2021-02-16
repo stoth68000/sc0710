@@ -33,6 +33,26 @@ static int video_debug = 1;
 
 static void sc0710_vid_timeout(unsigned long data);
 
+const char *sc0710_colorimetry_ascii(enum sc0710_colorimetry_e val)
+{
+	switch (val) {
+	case BT_601:       return "BT_601";
+	case BT_709:       return "BT_709";
+	case BT_2020:      return "BT_2020";
+	default:           return "BT_UNDEFINED";
+	}
+}
+
+const char *sc0710_colorspace_ascii(enum sc0710_colorspace_e val)
+{
+	switch (val) {
+	case CS_YUV_YCRCB_422_420: return "YUV YCrCb 4:2:2 / 4:2:0";
+	case CS_YUV_YCRCB_444:     return "YUV YCrCb 4:4:4";
+	case CS_RGB_444:           return "RGB 4:4:4";
+	default:                   return "UNDEFINED";
+	}
+}
+
 #define FILL_MODE_COLORBARS 0
 #define FILL_MODE_GREENSCREEN 1
 #define FILL_MODE_BLUESCREEN 2
@@ -90,6 +110,222 @@ static void fill_frame(struct sc0710_dma_channel *ch,
 		memcpy(dest_frame + width_bytes, dest_frame, width_bytes);
 		dest_frame += width_bytes;
 	}
+}
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 0, 0)
+/* Let's assume these appeared in v4.0 */
+
+#define V4L2_DV_FL_IS_CE_VIDEO			(1 << 4)
+#define V4L2_DV_FL_HAS_CEA861_VIC		(1 << 7)
+#define V4L2_DV_FL_HAS_HDMI_VIC			(1 << 8)
+
+#define V4L2_DV_BT_CEA_3840X2160P24 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		297000000, 1276, 88, 296, 8, 10, 72, 0, 0, 0, \
+		V4L2_DV_FL_CAN_REDUCE_FPS | V4L2_DV_FL_IS_CE_VIDEO | \
+		V4L2_DV_FL_HAS_CEA861_VIC | V4L2_DV_FL_HAS_HDMI_VIC), \
+}
+
+#define V4L2_DV_BT_CEA_3840X2160P25 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		297000000, 1056, 88, 296, 8, 10, 72, 0, 0, 0, \
+		V4L2_DV_FL_IS_CE_VIDEO | V4L2_DV_FL_HAS_CEA861_VIC | \
+		V4L2_DV_FL_HAS_HDMI_VIC), \
+}
+
+#define V4L2_DV_BT_CEA_3840X2160P30 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		297000000, 176, 88, 296, 8, 10, 72, 0, 0, 0, \
+		V4L2_DV_FL_CAN_REDUCE_FPS | V4L2_DV_FL_IS_CE_VIDEO | \
+		V4L2_DV_FL_HAS_CEA861_VIC | V4L2_DV_FL_HAS_HDMI_VIC, \
+		) \
+}
+
+#define V4L2_DV_BT_CEA_3840X2160P50 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		594000000, 1056, 88, 296, 8, 10, 72, 0, 0, 0, \
+		V4L2_DV_FL_IS_CE_VIDEO | V4L2_DV_FL_HAS_CEA861_VIC, ) \
+}
+
+#define V4L2_DV_BT_CEA_3840X2160P60 { \
+	.type = V4L2_DV_BT_656_1120, \
+	V4L2_INIT_BT_TIMINGS(3840, 2160, 0, \
+		V4L2_DV_HSYNC_POS_POL | V4L2_DV_VSYNC_POS_POL, \
+		594000000, 176, 88, 296, 8, 10, 72, 0, 0, 0, \
+		V4L2_DV_FL_CAN_REDUCE_FPS | V4L2_DV_FL_IS_CE_VIDEO | \
+		V4L2_DV_FL_HAS_CEA861_VIC,) \
+}
+#endif /* #if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 0, 0) */
+
+#define SUPPORT_INTERLACED 0
+static struct sc0710_format formats[] =
+{
+#if SUPPORT_INTERLACED
+	{  858,  262,  720,  240, 1, 2997, 30000, 1001, 8, 0, "720x480i29.97",   V4L2_DV_BT_CEA_720X480I59_94 },
+#endif
+	{  858,  525,  720,  480, 0, 5994, 60000, 1001, 8, 0, "720x480p59.94",   V4L2_DV_BT_CEA_720X480P59_94 },
+
+#if SUPPORT_INTERLACED
+	{  864,  312,  720,  288, 1, 2500, 25000, 1000, 8, 0, "720x576i25",      V4L2_DV_BT_CEA_720X576I50 },
+#endif
+
+	{ 1980,  750, 1280,  720, 0, 5000, 50000, 1000, 8, 0, "1280x720p50",     V4L2_DV_BT_CEA_1280X720P50 },
+	{ 1650,  750, 1280,  720, 0, 5994, 60000, 1001, 8, 0, "1280x720p59.94",  V4L2_DV_BT_CEA_1280X720P60 },
+	{ 1650,  750, 1280,  720, 0, 6000, 60000, 1000, 8, 0, "1280x720p60",     V4L2_DV_BT_CEA_1280X720P60 },
+
+#if SUPPORT_INTERLACED
+	{ 2640,  562, 1920,  540, 1, 2500, 25000, 1000, 8, 0, "1920x1080i25",    V4L2_DV_BT_CEA_1920X1080I50 },
+	{ 2200,  562, 1920,  540, 1, 2997, 30000, 1001, 8, 0, "1920x1080i29.97", V4L2_DV_BT_CEA_1920X1080I60 },
+#endif
+	{ 2750, 1125, 1920, 1080, 0, 2400, 24000, 1000, 8, 0, "1920x1080p24",    V4L2_DV_BT_CEA_1920X1080P24 },
+	{ 2640, 1125, 1920, 1080, 0, 2500, 25000, 1000, 8, 0, "1920x1080p25",    V4L2_DV_BT_CEA_1920X1080P25 },
+	{ 2200, 1125, 1920, 1080, 0, 3000, 30000, 1000, 8, 0, "1920x1080p30",    V4L2_DV_BT_CEA_1920X1080P30 },
+	{ 2640, 1125, 1920, 1080, 0, 5000, 50000, 1000, 8, 0, "1920x1080p50",    V4L2_DV_BT_CEA_1920X1080P50 },
+	{ 2200, 1125, 1920, 1080, 0, 6000, 60000, 1000, 8, 0, "1920x1080p60",    V4L2_DV_BT_CEA_1920X1080P60 },
+
+	{ 4400, 2250, 3840, 2160, 0, 6000, 60000, 1000, 8, 0, "3840x2160p60",    V4L2_DV_BT_CEA_3840X2160P60 },
+};
+
+void sc0710_format_initialize(void)
+{
+	struct sc0710_format *fmt;
+	unsigned int i;
+	for (i = 0; i < ARRAY_SIZE(formats); i++) {
+		fmt = &formats[i];
+
+		/* Assuming YUV 8-bit */
+		fmt->framesize = fmt->width * 2 * fmt->height;
+	}
+}
+
+const struct sc0710_format *sc0710_format_find_by_timing(u32 timingH, u32 timingV)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(formats); i++) {
+		if ((formats[i].timingH == timingH) && (formats[i].timingV == timingV)) {
+			return &formats[i];
+		}
+	}
+
+	return NULL;
+}
+
+static int vidioc_s_dv_timings(struct file *file, void *_fh, struct v4l2_dv_timings *timings)
+{
+	struct sc0710_dma_channel *ch = video_drvdata(file);
+	struct sc0710_dev *dev = ch->dev;
+
+	dprintk(1, "%s()\n", __func__);
+
+	return -EINVAL; /* No support for setting DV Timings */
+}
+
+static int vidioc_g_dv_timings(struct file *file, void *_fh, struct v4l2_dv_timings *timings)
+{
+	struct sc0710_dma_channel *ch = video_drvdata(file);
+	struct sc0710_dev *dev = ch->dev;
+
+	dprintk(0, "%s()\n", __func__);
+
+	if (dev->fmt == NULL)
+		return -EINVAL;
+
+	/* Return the current detected timings. */
+	*timings = dev->fmt->dv_timings;
+
+	return 0;
+}
+
+static int vidioc_query_dv_timings(struct file *file, void *_fh, struct v4l2_dv_timings *timings)
+{
+//	struct sc0710_dma_channel *ch = video_drvdata(file);
+//	struct sc0710_dev *dev = ch->dev;
+
+	int ret = -ENOMEM;
+
+#if 0
+	struct hdpvr_video_info *vid_info;
+	bool interlaced;
+	int ret = 0;
+	int i;
+
+	fh->legacy_mode = false;
+	if (dev->options.video_input)
+		return -ENODATA;
+	vid_info = get_video_info(dev);
+	if (vid_info == NULL)
+		return -ENOLCK;
+	interlaced = vid_info->fps <= 30;
+	for (i = 0; i < ARRAY_SIZE(hdpvr_dv_timings); i++) {
+		const struct v4l2_bt_timings *bt = &hdpvr_dv_timings[i].bt;
+		unsigned hsize;
+		unsigned vsize;
+		unsigned fps;
+
+		hsize = bt->hfrontporch + bt->hsync + bt->hbackporch + bt->width;
+		vsize = bt->vfrontporch + bt->vsync + bt->vbackporch +
+			bt->il_vfrontporch + bt->il_vsync + bt->il_vbackporch +
+			bt->height;
+		fps = (unsigned)bt->pixelclock / (hsize * vsize);
+		if (bt->width != vid_info->width ||
+		    bt->height != vid_info->height ||
+		    bt->interlaced != interlaced ||
+		    (fps != vid_info->fps && fps + 1 != vid_info->fps))
+			continue;
+		*timings = hdpvr_dv_timings[i];
+		break;
+	}
+	if (i == ARRAY_SIZE(hdpvr_dv_timings))
+		ret = -ERANGE;
+	kfree(vid_info);
+#endif
+	return ret;
+}
+
+/* Enum all possible timings we could support. */
+static int vidioc_enum_dv_timings(struct file *file, void *_fh, struct v4l2_enum_dv_timings *timings)
+{
+//	struct sc0710_dma_channel *ch = video_drvdata(file);
+//	struct sc0710_dev *dev = ch->dev;
+
+	memset(timings->reserved, 0, sizeof(timings->reserved));
+
+	if (timings->index >= ARRAY_SIZE(formats))
+		return -EINVAL;
+
+	timings->timings = formats[timings->index].dv_timings;
+
+	return 0;
+}
+
+static int vidioc_dv_timings_cap(struct file *file, void *_fh, struct v4l2_dv_timings_cap *cap)
+{
+//	struct sc0710_dma_channel *ch = video_drvdata(file);
+//	struct sc0710_dev *dev = ch->dev;
+
+	cap->type = V4L2_DV_BT_656_1120;
+	cap->bt.min_width = 720;
+	cap->bt.max_width = 1920;
+	cap->bt.min_height = 480;
+	cap->bt.max_height = 1080;
+	cap->bt.min_pixelclock = 27000000;
+	cap->bt.max_pixelclock = 74250000;
+	cap->bt.standards = V4L2_DV_BT_STD_CEA861;
+	cap->bt.capabilities = V4L2_DV_BT_CAP_PROGRESSIVE;
+#if SUPPORT_INTERLACED
+	cap->bt.capabilities |= V4L2_DV_BT_CAP_INTERLACED;
+#endif
+
+	return 0;
 }
 
 static struct videobuf_queue *get_queue(struct sc0710_fh *fh)
@@ -515,18 +751,24 @@ static const struct v4l2_file_operations video_fops = {
 
 static const struct v4l2_ioctl_ops video_ioctl_ops =
 {
-	.vidioc_querycap      = vidioc_querycap,
+	.vidioc_querycap         = vidioc_querycap,
 
-	.vidioc_enum_input    = vidioc_enum_input,
-	.vidioc_g_input       = vidioc_g_input,
-	.vidioc_s_input       = vidioc_s_input,
+	.vidioc_s_dv_timings     = vidioc_s_dv_timings,
+	.vidioc_g_dv_timings     = vidioc_g_dv_timings,
+	.vidioc_query_dv_timings = vidioc_query_dv_timings,
+	.vidioc_enum_dv_timings  = vidioc_enum_dv_timings,
+	.vidioc_dv_timings_cap   = vidioc_dv_timings_cap,
 
-	.vidioc_reqbufs       = vidioc_reqbufs,
-	.vidioc_querybuf      = vidioc_querybuf,
-	.vidioc_qbuf          = vidioc_qbuf,
-	.vidioc_dqbuf         = vidioc_dqbuf,
-	.vidioc_streamon      = vidioc_streamon,
-	.vidioc_streamoff     = vidioc_streamoff,
+	.vidioc_enum_input       = vidioc_enum_input,
+	.vidioc_g_input          = vidioc_g_input,
+	.vidioc_s_input          = vidioc_s_input,
+
+	.vidioc_reqbufs          = vidioc_reqbufs,
+	.vidioc_querybuf         = vidioc_querybuf,
+	.vidioc_qbuf             = vidioc_qbuf,
+	.vidioc_dqbuf            = vidioc_dqbuf,
+	.vidioc_streamon         = vidioc_streamon,
+	.vidioc_streamoff        = vidioc_streamoff,
 };
 
 static struct video_device sc0710_video_template =

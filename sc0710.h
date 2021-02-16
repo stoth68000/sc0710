@@ -35,6 +35,7 @@
 #include <linux/mutex.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/v4l2-dv-timings.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ctrls.h>
@@ -245,6 +246,22 @@ struct sc0710_i2c {
 	u32                        i2c_rc;
 };
 
+enum sc0710_colorimetry_e
+{
+	BT_UNDEFINED = 0,
+	BT_601  = 601,
+	BT_709  = 709,
+	BT_2020 = 2020,
+};
+
+enum sc0710_colorspace_e
+{
+	CS_UNDEFINED = 0,
+	CS_YUV_YCRCB_422_420, 
+	CS_YUV_YCRCB_444,
+	CS_RGB_444,
+};
+
 struct sc0710_format
 {
 	u32   timingH;
@@ -258,6 +275,7 @@ struct sc0710_format
 	u32   depth; /* bits */
 	u32   framesize; /* bytes */
 	char *name;
+	struct v4l2_dv_timings dv_timings;
 };
 
 struct sc0710_audio_dev
@@ -310,6 +328,8 @@ struct sc0710_dev {
 	u32                        width, height;    /* Actual display */
 	u32                        interlaced;
 	const struct sc0710_format *fmt;
+	enum sc0710_colorimetry_e  colorimetry;
+	enum sc0710_colorspace_e   colorspace;
 
 	/* Procamp */
 	s32                        brightness;
@@ -386,6 +406,8 @@ s64  sc0710_things_per_second_query(struct sc0710_things_per_second *tps);
 /* video.c */
 void sc0710_video_unregister(struct sc0710_dma_channel *ch);
 int  sc0710_video_register(struct sc0710_dma_channel *ch);
+const char *sc0710_colorimetry_ascii(enum sc0710_colorimetry_e val);
+const char *sc0710_colorspace_ascii(enum sc0710_colorspace_e val);
 
 /* -dma-chain.c */
 void sc0710_dma_chain_free(struct sc0710_dma_channel *ch, int nr);

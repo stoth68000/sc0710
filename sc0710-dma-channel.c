@@ -32,7 +32,7 @@
 
 #include "sc0710.h"
 
-static int dma_channel_debug = 2;
+static int dma_channel_debug = 1;
 #define dprintk(level, fmt, arg...)\
         do { if (dma_channel_debug >= level)\
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\

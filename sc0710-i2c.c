@@ -29,6 +29,7 @@
 #define I2C_DEV__ARM_MCU (0x32 << 1)
 #define I2C_DEV__UNKNOWN (0x33 << 1)
 
+#if 0
 static int didack(struct sc0710_dev *dev)
 {
 	u32 v;
@@ -44,6 +45,7 @@ static int didack(struct sc0710_dev *dev)
 
 	return 0; /* No Ack */
 }
+#endif
 
 static u8 busread(struct sc0710_dev *dev)
 {
@@ -63,6 +65,7 @@ static u8 busread(struct sc0710_dev *dev)
 	return v;
 }
 
+#if 0
 /* Assumes 8 bit device address and 8 bit sub address. */
 static int sc0710_i2c_write(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf, int wlen)
 {
@@ -89,6 +92,7 @@ static int sc0710_i2c_write(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf, in
 
 	return 0; /* Success */
 }
+#endif
 
 static int sc0710_i2c_writeread(struct sc0710_dev *dev, u8 devaddr8bit, u8 *wbuf, int wlen, u8 *rbuf, int rlen)
 {
@@ -187,6 +191,35 @@ int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 
 	if (rbuf[8]) {
 		dev->locked = 1;
+		
+		switch ((rbuf[0x0d] & 0x30) >> 4) {
+		case 0x1:
+			dev->colorimetry = BT_709;
+			break;
+		case 0x2:
+			dev->colorimetry = BT_601;
+			break;
+		case 0x3:
+			dev->colorimetry = BT_2020;
+			break;
+		default:
+			dev->colorimetry = BT_UNDEFINED;
+		}
+
+		switch (rbuf[0x0f]) {
+		case 0x0:
+			dev->colorspace = CS_YUV_YCRCB_422_420;
+			break;
+		case 0x1:
+			dev->colorspace = CS_YUV_YCRCB_444;
+			break;
+		case 0x2:
+			dev->colorspace = CS_RGB_444;
+			break;
+		default:
+			dev->colorspace = CS_UNDEFINED;
+		}
+
 		dev->width = rbuf[0x0b] << 8 | rbuf[0x0a];
 		dev->height = rbuf[0x09] << 8 | rbuf[0x08];
 		dev->pixelLineV = rbuf[0x05] << 8 | rbuf[0x04];
@@ -205,6 +238,8 @@ int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 		dev->pixelLineH = 0;
 		dev->pixelLineV = 0;
 		dev->interlaced = 0;
+		dev->colorimetry = BT_UNDEFINED;
+		dev->colorspace = CS_UNDEFINED;
 	}
 
 	return 0; /* Success */

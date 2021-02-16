@@ -1,6 +1,6 @@
 sc0710-objs := \
 	sc0710-cards.o sc0710-core.o sc0710-i2c.o \
-	sc0710-formats.o sc0710-dma-channel.o sc0710-dma-channels.o \
+	sc0710-dma-channel.o sc0710-dma-channels.o \
 	sc0710-dma-chains.o sc0710-dma-chain.o \
 	sc0710-things-per-second.o sc0710-video.o \
 	sc0710-audio.o
@@ -73,5 +73,24 @@ stream2160p:
 
 dumpaudioparams:
 	arecord --dump-hw-params -D hw:2,0
+
+dvtimings:
+	v4l2-ctl --get-dv-timings
+
+10bitAVC:
+	./ffmpeg -y -r 59.94 -f rawvideo -pixel_format yuv422p10le -video_size 1920x1080 -i /dev/video0 \
+		-vcodec libx264 -pix_fmt yuv420p10le -preset ultrafast -tune zerolatency \
+		-f mpegts recording.ts
+
+10bitHEVC:
+	./ffmpeg-hevc -y -r 59.94 -f rawvideo -pixel_format yuv422p10le -video_size 1920x1080 -i /dev/video0 \
+		-vcodec libx265 -pix_fmt yuv422p10le -preset ultrafast -tune zerolatency \
+		-f mpegts recording.ts
+
+
+probe:
+	# See https://codecalamity.com/encoding-uhd-4k-hdr10-videos-with-ffmpeg/
+	./ffprobe-hevc -hide_banner -loglevel warning -select_streams v -print_format json -show_frames \
+		-read_intervals "%+#1" -show_entries "frame=color_space,color_primaries,color_transfer,side_data_list,pix_fmt" -i recording.ts 
 
 #yuv422p10le 10bit 4:2:2
