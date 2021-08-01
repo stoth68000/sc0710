@@ -44,7 +44,7 @@ static int dma_channel_debug = 1;
  *
  * This matches the windows driver design, and after review the industry
  * (xilinx) believe that a looping descriptor set that needs no servicing
- * keeps the DMA buss 100% busy, all the time and maximises throughput on
+ * keeps the DMA bus 100% busy, all the time and maximises throughput on
  * the DMA channel. Where as, waiting for an
  * interrupt to services the DMA system (which its stopped) introduces
  * unwanted latency.
