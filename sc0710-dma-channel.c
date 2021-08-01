@@ -58,13 +58,13 @@ static int dma_channel_debug = 1;
  *
  * Upon descriptor completion, we'll look up which descriptor
  * has changed, and copy the data out of the descriptor buffer BEFORE
- * the dma subsystem has chance to ovewrite it.
+ * the dma subsystem has chance to overwrite it.
  *
  * Each channel has N chains of descriptors, a minimum of four.
- * So, our latency is  the counter changes, we notice 2ms later, we spend micro seconds
+ * So, our latency is the counter change, we notice 2ms later, we spend micro seconds
  * looking at each descriptor in turn (N - typically 6), when we detect
  * that its changed, we'll immediately memcpy the dma dest buffer
- * into a previously allocated user facing video 4 linux buffer.
+ * into a previously allocated user facing video4linux buffer.
  *
  * 1. We'll allocate two PAGE of PCIe root addressible ram
  *    to hold a) scatter gather descriptors and
