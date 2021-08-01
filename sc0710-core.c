@@ -240,6 +240,9 @@ static int sc0710_proc_state_show(struct seq_file *m, void *v)
 				dev->width, dev->height,
 				dev->interlaced ? 'i' : 'p',
 				dev->pixelLineH, dev->pixelLineV);
+			if (dev->fmt) {
+				seq_printf(m, "   framesize: %d\n", dev->fmt->framesize);
+			}
 		} else {
 			seq_printf(m, "        HDMI: no signal\n");
 		}
