@@ -371,6 +371,7 @@ static int sc0710_thread_dma_function(void *data)
 		if (thread_dma_active == 0)
 			continue;
 
+#if 0
 		if (lastDMAStatus == 0 && dma_status == 1) {
 			/* Spin up the dma */
 			dma_status = 2;
@@ -381,6 +382,7 @@ static int sc0710_thread_dma_function(void *data)
 			dma_status = 0;
 			sc0710_dma_channels_stop(dev);
 		}
+#endif
 		lastDMAStatus = dma_status;
 
 		/* Other parts of the driver need to guarantee that
