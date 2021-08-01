@@ -24,6 +24,19 @@
 
 #include "sc0710.h"
 
+int sc0710_dma_channels_resize(struct sc0710_dev *dev)
+{
+	printk(KERN_ERR "%s()\n", __func__);
+	switch (dev->board) {
+	case SC0710_BOARD_ELGATEO_4KP60_MK2:
+		sc0710_dma_channel_resize(dev, 0, CHDIR_INPUT, 0x1000, CHTYPE_VIDEO);
+		sc0710_dma_channel_resize(dev, 1, CHDIR_INPUT, 0x1100, CHTYPE_AUDIO);
+		break;
+	}
+
+	return 0;
+}
+
 int sc0710_dma_channels_alloc(struct sc0710_dev *dev)
 {
 	switch (dev->board) {

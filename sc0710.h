@@ -389,6 +389,8 @@ int  sc0710_dma_channel_service(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_start_prep(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_start(struct sc0710_dma_channel *ch);
 int  sc0710_dma_channel_stop(struct sc0710_dma_channel *ch);
+int  sc0710_dma_channel_resize(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction, u32 baseaddr,
+	enum sc0710_channel_type_e mediatype);
 enum sc0710_channel_state_e sc0710_dma_channel_state(struct sc0710_dma_channel *ch);
 
 /* --dma-channels.c */
@@ -397,6 +399,7 @@ void sc0710_dma_channels_free(struct sc0710_dev *dev);
 int  sc0710_dma_channels_start(struct sc0710_dev *dev);
 int  sc0710_dma_channels_service(struct sc0710_dev *dev);
 void sc0710_dma_channels_stop(struct sc0710_dev *dev);
+int  sc0710_dma_channels_resize(struct sc0710_dev *dev);
 
 /* things-per-second.c */
 void sc0710_things_per_second_reset(struct sc0710_things_per_second *tps);

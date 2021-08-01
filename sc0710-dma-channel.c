@@ -322,10 +322,8 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		ch->numDescriptorChains = 4;
-		ch->buf_size = 0x1c2000; /* 1280x 720p*/
-		ch->buf_size = 0x3f4800; /* 1920x1080p */
-		//ch->buf_size = 0xfd2000; /* 3840x2160p */
-printk("Allocating channel for size %d\n", ch->buf_size);
+		ch->buf_size = 0x1c2000; /* 1280x 720p - default sizing. We'll adjust prior to streaming. */
+		printk("Allocating channel for size %d\n", ch->buf_size);
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
 		ch->numDescriptorChains = 4;
@@ -378,6 +376,57 @@ printk("Allocating channel for size %d\n", ch->buf_size);
 	if (ch->mediatype == CHTYPE_AUDIO) {
 		sc0710_audio_register(dev);
 	}
+
+	return 0; /* Success */
+};
+
+int sc0710_dma_channel_resize(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction,
+	u32 baseaddr,
+	enum sc0710_channel_type_e mediatype)
+{
+	struct sc0710_dma_channel *ch = &dev->channel[nr];
+	if (nr >= SC0710_MAX_CHANNELS)
+		return -1;
+
+	if (!dev->fmt) {
+		return -1;
+	}
+
+	sc0710_dma_chains_free(ch);
+
+	printk(KERN_INFO "%s channel %d resized for framesize %d\n", dev->name, nr, dev->fmt->framesize);
+
+	if (ch->mediatype == CHTYPE_VIDEO) {
+		ch->numDescriptorChains = 4;
+		ch->buf_size = dev->fmt->framesize;
+		printk("Resizing channel for size %d\n", ch->buf_size);
+	} else
+	if (ch->mediatype == CHTYPE_AUDIO) {
+		ch->numDescriptorChains = 4;
+		ch->buf_size = 0x4000;
+	} else {
+		ch->numDescriptorChains = 0;
+	}
+
+	/* Page table defaults. */
+	/* This assumed PAGE_SIZE is 4K */
+	/* allocate the descriptor table, its contigious. */
+	ch->pt_size = PAGE_SIZE * 2;
+
+	ch->pt_cpu = pci_alloc_consistent(dev->pci, ch->pt_size, &ch->pt_dma);
+	if (ch->pt_cpu == 0)
+		return -1;
+
+	memset(ch->pt_cpu, 0, ch->pt_size);
+
+	/* register offsets use by the channel and dma descriptor register writes/reads. */
+
+	sc0710_dma_chains_alloc(ch, ch->buf_size);
+
+	printk(KERN_INFO "%s channel %d allocated\n", dev->name, nr);
+
+	sc0710_dma_channel_chains_link(ch);
+	sc0710_dma_chains_dump(ch);
 
 	return 0; /* Success */
 };

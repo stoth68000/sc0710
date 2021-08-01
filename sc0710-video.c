@@ -446,6 +446,13 @@ static int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 		channel->frame_format_len = 0;
 #endif
 
+	/* Make sure we have a detected format for video. */
+	if (dev->fmt == NULL) {
+		return -EINVAL;
+	}
+
+	sc0710_dma_channels_resize(dev);
+
 	if (sc0710_dma_channels_start(dev) < 0)
 		return -EINVAL;
 
