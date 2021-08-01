@@ -59,7 +59,9 @@ analyzer traces, random notes - just to use the driver.
 * Feb 14 2021 - Added audio support, PCM 16bit 48KHz.
 * Feb 14 2021 - Driver is usable for certain resolutions for video and audio capture via ffmpeg.
 * Feb 13 2021 - Overhauled the scatter gather subsystem to support 4k video.
-* Feb 11 2021 - Firest every colorbar still iage captured via the driver.
+* Feb 11 2021 - First every colorbar still iage captured via the driver.
+* Aug  1 2021 - Driver adjusts to auto detect 1280x720p vs 1920x1080p and work accordingly.
+* Aug  1 2021 - 4k is untested with the latest changes, but should be full supported.
 
 # TODO
 * Test/Support HDR 10bit.
