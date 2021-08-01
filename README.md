@@ -66,7 +66,6 @@ analyzer traces, random notes - just to use the driver.
 # TODO
 * Test/Support HDR 10bit.
 * Intermittent issue during capture, possible short video frame, casuses ffmpeg to error and stall.
-* Dynamically adjust the dma allocations prior to capture start, currently fixed to 1080p60
 
 # Comments / Support
 
