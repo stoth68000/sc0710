@@ -49,6 +49,14 @@ stream720p:
 		-vcodec libx264 -preset ultrafast -tune zerolatency \
 		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
 
+stream720pAudio:
+	ffmpeg -r 59.94 -f rawvideo -pixel_format yuyv422 -video_size 1280x720 -i /dev/video0 \
+		-f alsa -ac 2 -ar 48000 -i hw:2,0 \
+		-vcodec libx264 -preset ultrafast -tune zerolatency \
+		-acodec mp2 \
+		-f mpegts udp://192.168.0.66:4001?pkt_size=1316
+
+
 stream720p10:
 	ffmpeg -r 59.94 -f rawvideo -pixel_format yuv422p10le -video_size 1280x720 -i /dev/video0 \
 		-vcodec libx264 -preset ultrafast -tune zerolatency \
