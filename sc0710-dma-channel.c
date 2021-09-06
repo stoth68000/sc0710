@@ -130,6 +130,38 @@ static int dma_channel_debug = 1;
  * 3. The descriptors will contain lengths for the dma transfer and
  *    locations for the metadata writeback to happen.
  *
+ * ---
+ *
+ * During testing of Poll mode, I would see occasional frame alignment
+ * issues in ffmpeg. Meaning, the top of the frame would start vrttically
+ * in the front place in the frame. Since the beginning of the transfer is
+ * assuming to contain (ALWAYS) VSYNC, if I switch to IRQ based transfers,
+ * do I avoid this unusual condition? I don't know, but I'm trying it anyway.
+ *
+ * 2. IRQ Support:
+ *
+ * Insteaf of writing descriptor tables that constaintly run, when complete
+ * restarting at the beginning (and incrementing the writeback metdata), I
+ * will have the descriptor processing stop. An interrupt should be triggered.
+ * The interupt handler (sc0710_irq) which in polled mode does nothing,
+ * will then take ownership of determining which descriptor just stopped,
+ * immediately starting a different descriptor, then deferring service
+ * of the completeed descriptor chain into a worker thread.
+ *
+ * a. in sc0710_thread_dma_function(), don't call dma_channels_service()
+ *    every 2ms.
+ * b. in sc0710_dma_channel_chains_link() instead of having the last descriptor
+ *    loop back to the first, terminate the descriptor chain and raise
+ *    an interrupt.
+ * c. in sc0710_irq(), using a variation of dma_channels_service(),
+ *    - look at every descriptor, find the first free descriptor not
+ *      being used and put that back on the hardware for the next transfer.
+ *    - Find the decriptor chain just completed, schedule this for
+ *      dequeue in a workthread at some future point in time.
+ * d. Create a workthread that takes takes a specific dma chain,
+ *    dq's it to the audio / video subsystems, cleans up the chain,
+ *    marks is as empty then the irq handler can use this thread in the future
+ *    to perform transfers.
  */
 
 /* Copy the contains of the video chain into a video4linux buffer.
