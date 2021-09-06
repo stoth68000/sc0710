@@ -18,12 +18,11 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* Each FPGA descriptor is 8xDWORD.
+/* Each FPGA DMA descriptor is 8xDWORD (32 Bytes)
  * We're going to have 8 descriptors per channel, where
- * each descriptor is either a frame of video or a 'chunk' (TBD)
- * of audio.
+ * each descriptor is either a frame of video or a 'chunk' of audio.
  * The entire descriptor pagetable for a single channel will fit
- * inside a single page of memory.
+ * inside a single page of memory. (8 * 32).
  */
 
 #include <linux/module.h>
@@ -38,49 +37,82 @@ static int dma_channel_debug = 1;
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
         } while (0)
 
-/* We're not doing IRQ and interrupt servicing of the dma subsystem, instead
- * we're going to rely on a 2ms kernel thread to poll and dequeue
+#define DMA_AUDIO_TRANSFER_SIZE 0x4000
+#define DMA_TRANSFER_CHAINS     4
+
+/* The ways of processing the DMA.
+ * 1. Polled
+ * 2. IRQ.
+ * 
+ * The first implementation is polled. See why below.
+ * Later, we added IRQ support.
+ *
+ * 1. Poll Support:
+ *
+ * We're going to rely on a 2ms kernel thread to poll and dequeue
  * buffers.
  *
  * This matches the windows driver design, and after review the industry
- * (xilinx) believe that a looping descriptor set that needs no servicing
+ * (xilinx) believe that a looping descriptor set, that runs consistent
+ * and never terminates, it needs no IRQ servicing
  * keeps the DMA bus 100% busy, all the time and maximises throughput on
- * the DMA channel. Where as, waiting for an
+ * the DMA channel. Where as, (IRQ servicing) waiting for an
  * interrupt to services the DMA system (which its stopped) introduces
  * unwanted latency.
  *
- * The basic design for this driver is, every 2ms this function is called.
- * We'll read the DMA controller 'descriptors count complete' register
- * for this channel.
+ * The basic design for this polled dma driver is, every 2ms this
+ * function is called. We'll read the DMA controller
+ * 'descriptors count complete' register for this channel. We see
+ * the windows driver doing this (via the PCIe analyzer).
  *
  * If the descriptor counter has changed since the last time we read
- * then another descriptor has completed.
+ * then another descriptor has completed (which contains an entire
+ * frame).
  *
  * Upon descriptor completion, we'll look up which descriptor
  * has changed, and copy the data out of the descriptor buffer BEFORE
  * the dma subsystem has chance to overwrite it.
  *
- * Each channel has N chains of descriptors, a minimum of four.
- * So, our latency is the counter change, we notice 2ms later, we spend micro seconds
- * looking at each descriptor in turn (N - typically 6), when we detect
- * that its changed, we'll immediately memcpy the dma dest buffer
- * into a previously allocated user facing video4linux buffer.
+ * Each channel has N chains (ch->numDescriptorChains) of descriptors, a minimum of four, this
+ * lets us splut very large video frames into smaller and more reasonable
+ * scatter gather PCIe memory allocations, rathar than assuming
+ * we can allocate a single valuable chunk of ram for a 4K video frame.
  *
- * 1. We'll allocate two PAGE of PCIe root addressible ram
+ * So, our latency is the counter change, we notice 2ms later, we spend
+ * micro seconds looking at each descriptor in turn (N - typically 6),
+ * when we detect that its changed, we'll immediately memcpy the dma
+ * dest buffer into a previously allocated user facing video4linux buffer.
+ *
+ * 1. We'll allocate two PAGEs of PCIe root addressible ram
  *    to hold a) scatter gather descriptors and
  *            b) metadata writeback data provided
  *    by the card root controller.
  *
- *    When the DMA controller finished a descriptor, it updates
+ *    When the DMA controller finishes a descriptor, it updates
  *    the metadata writeback so we'll monitor the metadata to see
  *    which descriptor chains have finished.
  *
- *    0x0000  descriptor1
- *    0x0020  descriptor2
- *    0x0040  descriptor3
- *    0x0060  descriptor4
- *    0x0080  descriptor5
- *    0x00a0  descriptor6
+ *    Descriptor1ChainA (first quarter of the video frame) when
+ *                      complete, continues at chain2.
+ *    Descriptor1ChainB (second quarter of the video frame) when
+ *                      complete, continues at chain3.
+ *    Descriptor1ChainC (third quarter of the video frame) when
+ *                      complete, continues at chain4.
+ *    Descriptor1ChainD (last quarter of the video frame) when
+ *                      complete, continues at descriptor2ChainA, and
+ *                      metadata writeback data is incremented.
+ *    At the end of Descriptor3ChainD, processing wraps and continues
+ *    back at the very beginning of Descriptor1ChainA.
+ *
+ *    PAGE 1 PCIe root addressible:
+ *    0x0000  descriptorChain1a
+ *    0x0020  descriptorChain1b
+ *    0x0040  descriptorChain1c
+ *    0x0060  descriptorChain1d
+ *    0x0080  descriptorChain2a
+ *    0x00a0  descriptorChain2b
+ *    ... etc
+ *    PAGE 2 PCIe root addressible:
  *    0x1000  descriptor1 writeback metadata location
  *    0x1020  descriptor2 writeback metadata location
  *    0x1030  descriptor3 writeback metadata location
@@ -88,16 +120,19 @@ static int dma_channel_debug = 1;
  *    0x1050  descriptor5 writeback metadata location
  *    0x1060  descriptor6 writeback metadata location
  *
- * 2. The descriptors will contain lengths for the dma transfer and
- *    locations for the metadata writeback to happen.
- *
- * 3. We'll allocate multiple large DMA addressible buffers
- *    to hold the final pixels and audio. These will be references
+ * 2. We'll allocate multiple large DMA addressible buffers
+ *    to hold the final pixels and audio. These will be referenced
  *    by the descriptors in each chain. A chain is expected to
  *    contain a single video picture, and create multiple
  *    buffers and point multiple descriptors at the buffers
  *    in order that the DMA controller can DMA the data into RAM.
  *
+ * 3. The descriptors will contain lengths for the dma transfer and
+ *    locations for the metadata writeback to happen.
+ *
+ */
+
+/* Copy the contains of the video chain into a video4linux buffer.
  * Return < 0 on error
  * Return number of buffers we copyinto from dma into user buffers.
  */
@@ -154,6 +189,8 @@ static void sc0710_dma_dequeue_video(struct sc0710_dma_channel *ch, struct sc071
 	spin_unlock_irqrestore(&ch->v4l2_capture_list_lock, flags);
 }
 
+/* Copy the contains of the audio chain into linux audio subsystem.
+ */
 static void sc0710_dma_dequeue_audio(struct sc0710_dma_channel *ch, struct sc0710_dma_descriptor_chain *chain)
 {
 	struct sc0710_dma_descriptor_chain_allocation *dca = &chain->allocations[0];
@@ -182,6 +219,11 @@ static void sc0710_dma_dequeue_audio(struct sc0710_dma_channel *ch, struct sc071
 
 }
 
+/* For a given channel, audio or video, check if any of the writeback
+ * descriptors have been set (indicating a complete transfer of audio or
+ * video is complete. Process this transfered data into video or audio
+ * frames.
+ */
 int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 {
 	struct sc0710_dev *dev = ch->dev;
@@ -194,8 +236,10 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 	if (ch->enabled == 0)
 		return -1;
 
+	/* Read how many descriptors have complete, if this hasn't changed
+	 * single we last checked, end early, nothing for us to do.
+	 */
 	v = sc_read(ch->dev, 1, ch->reg_dma_completed_descriptor_count);
-
 	if (v == ch->dma_completed_descriptor_count_last) {
 		/* No new buffers since our last service call. */
 		return 0;
@@ -210,10 +254,13 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 		/* Last allocated SG buffer in the chain. */
 		dca = &chain->allocations[ chain->numAllocations - 1 ];
 
+		/* Read the writeback metadata once, cache it locally. */
 		wbm[0] = *dca->wbm[0];
 		wbm[1] = *dca->wbm[1];
 
-		/* If the write back metadata is set, we know the chain is complete. */
+		/* If the write back metadata is set, we know the chain is complete, we'll
+		 * need to process a complete video/audio transfer.
+		 */
 		if (wbm[0] && wbm[1]) {
 
 			if (dma_channel_debug > 2) {
@@ -226,9 +273,11 @@ int sc0710_dma_channel_service(struct sc0710_dma_channel *ch)
 					wbm[1], chain->numAllocations);
 			}
 
+			/* Update some internal stats that measure throughput. */
 			sc0710_things_per_second_update(&ch->bitsPerSecond, chain->total_transfer_size * 8);
 			sc0710_things_per_second_update(&ch->descPerSecond, chain->numAllocations);
 
+			/* Service the audio, or video. */
 			if (ch->mediatype == CHTYPE_VIDEO) {
 				sc0710_dma_dequeue_video(ch, chain);
 			} else
@@ -265,10 +314,12 @@ static int sc0710_dma_channel_chains_link(struct sc0710_dma_channel *ch)
 			dca->desc = pt_desc++;
 
 			if ((i + 1 == ch->numDescriptorChains) && (j + 1 == chain->numAllocations)) {
-				/* Last descriptor in the last chains needs to point to the first desc in first chain. */
+				/* Last descriptor in the last chains needs to point to the
+				 * first desc in first chain. */
 				dca->desc->next_l = (u64)ch->pt_dma;
 				dca->desc->next_h = (u64)ch->pt_dma >> 32;
 			} else {
+				/* Point to the next descriptor in the chain. */
 				dca->desc->next_l = (u64)curr_tbl + sizeof(struct sc0710_dma_descriptor);
 				dca->desc->next_h = ((u64)curr_tbl + sizeof(struct sc0710_dma_descriptor)) >> 32;
 			}
@@ -285,9 +336,8 @@ static int sc0710_dma_channel_chains_link(struct sc0710_dma_channel *ch)
 
 			curr_tbl += sizeof(struct sc0710_dma_descriptor);
 			curr_wbm += sizeof(struct sc0710_dma_descriptor);
-		}
-
-	}
+		} /* for all allocations in a chain */
+	} /* for all chains */
 
 	return 0; /* Success */
 }
@@ -321,13 +371,16 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	sc0710_things_per_second_reset(&ch->audioSamplesPerSecond);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		ch->numDescriptorChains = 4;
-		ch->buf_size = 0x1c2000; /* 1280x 720p - default sizing. We'll adjust prior to streaming. */
+		ch->numDescriptorChains = DMA_TRANSFER_CHAINS;
+		/* 1280x 720p - default sizing during initialization.
+		 * we'll free and re-alloc up or down prior to streaming.
+		 */
+		ch->buf_size = 1280 * 2 * 720; /* 16bit pixels for everything. */
 		printk("Allocating channel for size %d\n", ch->buf_size);
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
-		ch->numDescriptorChains = 4;
-		ch->buf_size = 0x4000;
+		ch->numDescriptorChains = DMA_TRANSFER_CHAINS;
+		ch->buf_size = DMA_AUDIO_TRANSFER_SIZE;
 	} else {
 		ch->numDescriptorChains = 0;
 	}
@@ -345,6 +398,10 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 
 	/* register offsets use by the channel and dma descriptor register writes/reads. */
 
+	/* Configure this channel object dma controller registers, so we know how to control
+	 * and program the hardware channel.
+	 */
+
 	/* DMA controller */
 	ch->register_dma_base = baseaddr;
 	ch->reg_dma_control = ch->register_dma_base + 0x04;
@@ -356,6 +413,10 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
 	ch->reg_dma_poll_wba_l = ch->register_dma_base + 0x88;
 	ch->reg_dma_poll_wba_h = ch->register_dma_base + 0x8c;
 
+	/* Configure this channel object scatter gather  controller registers,
+	 * so we know how to control and program the hardware channel.
+	 */
+
 	/* SGDMA Controller */
 	ch->register_sg_base = baseaddr + 0x4000;
         ch->reg_sg_start_l = ch->register_sg_base + 0x80;
@@ -363,23 +424,36 @@ int sc0710_dma_channel_alloc(struct sc0710_dev *dev, u32 nr, enum sc0710_channel
         ch->reg_sg_adj = ch->register_sg_base + 0x88;
         ch->reg_sg_credits = ch->register_sg_base + 0x8c;
 
+	/* Allocate all the DMA buffers for this channel. */
 	sc0710_dma_chains_alloc(ch, ch->buf_size);
 
 	printk(KERN_INFO "%s channel %d allocated\n", dev->name, nr);
 
+	/* Adjust the descriptor chains to correctly reference each other,
+	 * based on the video or audio frame dma transfer size (dca->buf_size);
+	 */
 	sc0710_dma_channel_chains_link(ch);
+
+	/* Print the complete chain, descriptor, allocation configuration to the console. */
 	sc0710_dma_chains_dump(ch);
 
+	/* Register and create various linux4linux and audio subsystem devices. */
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		ret = sc0710_video_register(ch);
+		ret = sc0710_video_register(ch); /* TODO: Check result */
 	}
 	if (ch->mediatype == CHTYPE_AUDIO) {
-		sc0710_audio_register(dev);
+		sc0710_audio_register(dev); /* TODO: Check result */
 	}
 
 	return 0; /* Success */
 };
 
+/* adjust the DMA subsystem transfer_size to match the video frame size
+ * we've detected from the HDMI receiver.
+ * this is called when the user first asks video streaming to be started,
+ * and we've detected video in the HDMI receiver and understand what
+ * DMA transfer sizes will be needed for a single video frame.
+ */
 int sc0710_dma_channel_resize(struct sc0710_dev *dev, u32 nr, enum sc0710_channel_dir_e direction,
 	u32 baseaddr,
 	enum sc0710_channel_type_e mediatype)
@@ -397,14 +471,21 @@ int sc0710_dma_channel_resize(struct sc0710_dev *dev, u32 nr, enum sc0710_channe
 	printk(KERN_INFO "%s channel %d resized for framesize %d\n", dev->name, nr, dev->fmt->framesize);
 
 	if (ch->mediatype == CHTYPE_VIDEO) {
-		ch->numDescriptorChains = 4;
+		ch->numDescriptorChains = DMA_TRANSFER_CHAINS;
+		/* When processing starts, tear down the current DMA allocations and
+		 * create new DMA allocation sizes suitable for the detect video frame
+		 * size, which could be much larger or smaller than any previous allocation.
+		 * Video transfers vary and need adjustment.
+		 */
 		ch->buf_size = dev->fmt->framesize;
 		printk("Resizing channel for size %d\n", ch->buf_size);
 	} else
 	if (ch->mediatype == CHTYPE_AUDIO) {
-		ch->numDescriptorChains = 4;
-		ch->buf_size = 0x4000;
+		/* Audio always uses a fixed transfer size */
+		ch->numDescriptorChains = DMA_TRANSFER_CHAINS;
+		ch->buf_size = DMA_AUDIO_TRANSFER_SIZE;
 	} else {
+		/* TODO: Safety, just return an error here? */
 		ch->numDescriptorChains = 0;
 	}
 
@@ -419,13 +500,15 @@ int sc0710_dma_channel_resize(struct sc0710_dev *dev, u32 nr, enum sc0710_channe
 
 	memset(ch->pt_cpu, 0, ch->pt_size);
 
-	/* register offsets use by the channel and dma descriptor register writes/reads. */
-
+	/* allocate DMA based on ch->buf_size */
 	sc0710_dma_chains_alloc(ch, ch->buf_size);
 
 	printk(KERN_INFO "%s channel %d allocated\n", dev->name, nr);
 
+	/* Connect all the descriptors together. */
 	sc0710_dma_channel_chains_link(ch);
+
+	/* Print the complete chain, descriptor, allocation configuration to the console. */
 	sc0710_dma_chains_dump(ch);
 
 	return 0; /* Success */
@@ -442,6 +525,7 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 
 	ch->enabled = 0;
 
+	/* Unregister video and audio subsystems and detach them from this driver. */
 	if (ch->mediatype == CHTYPE_VIDEO) {
 		sc0710_video_unregister(ch);
 	}
@@ -449,11 +533,16 @@ void sc0710_dma_channel_free(struct sc0710_dev *dev, u32 nr)
 		sc0710_audio_unregister(dev);
 	}
 
+	/* We don't need any DMA allocations, free them. */
 	sc0710_dma_chains_free(ch);
 
 	printk(KERN_INFO "%s channel %d deallocated\n", dev->name, nr);
 }
 
+/* Prepare the DMA and SG hardware. Reset, establish their
+ * first descriptor to process. The hardware itself is started
+ * later.
+ */
 int sc0710_dma_channel_start_prep(struct sc0710_dma_channel *ch)
 {
 	sc_write(ch->dev, 1, ch->reg_dma_control_w1c, 0x00000001);
@@ -467,6 +556,7 @@ int sc0710_dma_channel_start_prep(struct sc0710_dma_channel *ch)
 	return 0;
 }
 
+/* Stop the hardware, stop all DMA activity. */
 int sc0710_dma_channel_stop(struct sc0710_dma_channel *ch)
 {
 	sc_write(ch->dev, 1, ch->reg_dma_control_w1c, 0x00000001);
@@ -476,6 +566,10 @@ int sc0710_dma_channel_stop(struct sc0710_dma_channel *ch)
 	return 0;
 }
 
+/* Start the hardware, it was pre-programmed in the start_prep() function,
+ * so all we have to do is flip a bit to enable it and video/audio
+ * dma transfers will happen immediately.
+ */
 int sc0710_dma_channel_start(struct sc0710_dma_channel *ch)
 {
 	sc_write(ch->dev, 1, ch->reg_dma_control_w1s, 0x00000001);
@@ -487,4 +581,3 @@ enum sc0710_channel_state_e sc0710_dma_channel_state(struct sc0710_dma_channel *
 {
 	return ch->state;
 }
-

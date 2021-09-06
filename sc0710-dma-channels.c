@@ -77,22 +77,27 @@ int sc0710_dma_channels_start(struct sc0710_dev *dev)
 
 	printk("%s()\n", __func__);
 
+	/* Prepare all DMA channels to start */
 	for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
 		ret = sc0710_dma_channel_start_prep(&dev->channel[i]);
 	}
 
 	/* TODO: What do these registers do? Any documentation? */
+	/* Digging into the reference drivers for the SCxxxx cards available
+	 * from the CM's website, the hardware supports a video scaler.
+	 * I'm guessing that this is setting - maybe - a scaler? */
 
 	/* TODO: This register needs to be set to the height of the incoming
 	 * signal format.
 	 */
-	sc_write(dev, 0, BAR0_00C8, 0x438);
+	sc_write(dev, 0, BAR0_00C8, 0x438); /* 1080 */
 	sc_write(dev, 0, BAR0_00D0, 0x4100);
 	sc_write(dev, 0, 0xcc, 0);
 	sc_write(dev, 0, 0xdc, 0);
 	sc_write(dev, 0, BAR0_00D0, 0x4300);
 	sc_write(dev, 0, BAR0_00D0, 0x4100);
 
+	/* Start all DMA channels. */
 	for (i = 0; i < SC0710_MAX_CHANNELS; i++) {
 		ret = sc0710_dma_channel_start(&dev->channel[i]);
 	}
@@ -102,6 +107,11 @@ int sc0710_dma_channels_start(struct sc0710_dev *dev)
 	return 0;
 }
 
+/* Called every 2m in polled DMA mode, check
+ * each dma channel. If writeback metadata suggests a transfer
+ * has completed, process it and hand the audio/video to linux
+ * subsystems.
+ */
 int sc0710_dma_channels_service(struct sc0710_dev *dev)
 {
 	int i, ret;
