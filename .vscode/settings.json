@@ -1,0 +1,38 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+
+    // Configure glob patterns for excluding files and folders.
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+    }
+
+    "files.exclude": {
+        "**/.git": true,
+        "**/*.ko": true,
+        "**/.*.o.cmd": true,
+        "**/*.mod": true,
+        "**/*.mod.c": true,
+        "**/.*.order.cmd": true,
+        "**/.*.ko.cmd": true,
+        "**/.*.mod.cmd": true,
+        "**/.*.symvers.cmd": true,
+        "**/*.o": true,
+        "**/Makefile.in": true,
+        "**/.libs": true,
+        "**/.deps": true,
+        "**/Module.symvers": true,
+        "**/modules.order": true,
+    },
+    "files.associations": {
+        "*h*h*h*hfunctional": "cpp",
+        "functional": "cpp",
+        "*.tcc": "cpp",
+        "streambuf": "cpp",
+        "algorithm": "cpp",
+        "limits": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp"
+    }
+}
+
