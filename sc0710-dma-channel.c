@@ -202,8 +202,11 @@ static void sc0710_dma_dequeue_video(struct sc0710_dma_channel *ch, struct sc071
 		if (len != vb_buf->vb.size) {
 			printk("%s() error copying %lu bytes, copied %d\n", __func__, vb_buf->vb.size, len);
 		}
-
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 		do_gettimeofday(&vb_buf->vb.ts);
+#else
+		vb_buf->vb.ts = ktime_get_ns();
+#endif
 		list_del(&vb_buf->vb.queue);
 #if 0
         if (do_colorbars && (errors_on_colorsbars == 1))

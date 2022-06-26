@@ -318,6 +318,7 @@ static int sc0710_proc_state_open(struct inode *inode, struct file *filp)
 	return single_open(filp, sc0710_proc_state_show, NULL);
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 static struct file_operations sc0710_proc_fops = {
 	.open		= sc0710_proc_open,
 	.read		= seq_read,
@@ -331,6 +332,21 @@ static struct file_operations sc0710_proc_state_fops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+#else
+static struct proc_ops sc0710_proc_fops = {
+	.proc_open		= sc0710_proc_open,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
+};
+
+static struct proc_ops sc0710_proc_state_fops = {
+	.proc_open		= sc0710_proc_state_open,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
+};
+#endif
 
 static int sc0710_proc_create(void)
 {
@@ -453,7 +469,7 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 	if (NULL == dev)
 		return -ENOMEM;
 
-//	err = v4l2_device_register(&pci_dev->dev, &dev->v4l2_dev);
+	err = v4l2_device_register(&pci_dev->dev, &dev->v4l2_dev);
 
 	/* pci init */
 	dev->pci = pci_dev;
@@ -477,7 +493,11 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 		(unsigned int)pci_resource_len(pci_dev, 1));
 
 	pci_set_master(pci_dev);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 	if (!pci_dma_supported(pci_dev, 0xffffffff)) {
+#else
+	if (dma_set_mask(&pci_dev->dev, 0xffffffff)) {
+#endif
 		printk("%s/0: Oops: no 32bit PCI DMA ???\n", dev->name);
 		err = -EIO;
 		goto fail_irq;
@@ -492,11 +512,16 @@ static int sc0710_initdev(struct pci_dev *pci_dev,
 	if ((msi_enable) && (!pci_enable_msi(pci_dev))) {
 		printk("%s() MSI interrupts enabled\n", __func__);
 		err = request_irq(pci_dev->irq, sc0710_irq,
-			IRQF_DISABLED, dev->name, dev);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
+			IRQF_DISABLED,
+#else
+			0,
+#endif
+			dev->name, dev);
 	} else {
 		printk("%s() MSI interrupts disabled (driver default)\n", __func__);
 		err = request_irq(pci_dev->irq, sc0710_irq,
-			IRQF_SHARED | IRQF_DISABLED, dev->name, dev);
+			IRQF_SHARED, dev->name, dev);
 	}
 	if (err < 0) {
 		printk(KERN_ERR "%s: can't get IRQ %d\n",
@@ -586,7 +611,7 @@ static void sc0710_finidev(struct pci_dev *pci_dev)
 
 	sc0710_dev_unregister(dev);
 
-//	v4l2_device_unregister(&dev->v4l2_dev);
+	v4l2_device_unregister(&dev->v4l2_dev);
 	kfree(dev);
 }
 

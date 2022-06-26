@@ -26,21 +26,35 @@
 
 void sc0710_things_per_second_reset(struct sc0710_things_per_second *tps)
 {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 	getnstimeofday(&tps->lastTime);
+#else
+	tps->lastTime = ktime_get_ns();
+#endif
 	tps->persecond = 0;
 	tps->accumulator = 0;
 }
 
 void sc0710_things_per_second_update(struct sc0710_things_per_second *tps, s64 value)
 {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 	struct timespec now;
 	getnstimeofday(&now);
-
 	if (tps->lastTime.tv_sec != now.tv_sec) {
 		tps->lastTime = now;
 		tps->persecond = tps->accumulator;
 		tps->accumulator = 0;
 	}
+#else
+	u64 now;
+	now = ktime_get_ns();
+	if (now - tps->lastTime > 1000000) {
+		tps->lastTime = now;
+		tps->persecond = tps->accumulator;
+		tps->accumulator = 0;
+	}
+#endif
+
 	tps->accumulator += value;
 }
 

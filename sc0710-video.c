@@ -31,7 +31,11 @@ static int video_debug = 1;
                 printk(KERN_DEBUG "%s: " fmt, dev->name, ## arg);\
         } while (0)
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static void sc0710_vid_timeout(unsigned long data);
+#else
+static void sc0710_vid_timeout(struct timer_list *t);
+#endif
 
 const char *sc0710_colorimetry_ascii(enum sc0710_colorimetry_e val)
 {
@@ -636,12 +640,17 @@ static int sc0710_video_open(struct file *file)
 	enum v4l2_buf_type type = 0;
 
 	switch (vdev->vfl_type) {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 	case VFL_TYPE_GRABBER:
+#else
+	case VFL_TYPE_VIDEO:
+	default:
+#endif
 		type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		break;
 	}
 
-	dprintk(1, "%s() dev=%s type=%s\n", __func__, video_device_node_name(vdev), v4l2_type_names[type]);
+	dprintk(0, "%s() dev=%s type=%s\n", __func__, video_device_node_name(vdev), v4l2_type_names[type]);
 
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
 	if (fh == NULL)
@@ -658,9 +667,13 @@ static int sc0710_video_open(struct file *file)
 		sizeof(struct sc0710_buffer),
 		fh, NULL);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 	init_timer(&ch->timeout);
 	ch->timeout.function = sc0710_vid_timeout;
 	ch->timeout.data     = (unsigned long)ch;
+#else
+	timer_setup(&ch->timeout, sc0710_vid_timeout, 0);
+#endif
 
 	file->private_data = fh;
 
@@ -751,7 +764,7 @@ static const struct v4l2_file_operations video_fops = {
 	.open           = sc0710_video_open,
 	.release        = sc0710_video_release,
 	.read           = sc0710_video_read,
-	.poll		= sc0710_video_poll,
+	.poll		    = sc0710_video_poll,
 	.mmap           = sc0710_video_mmap,
 	.unlocked_ioctl = video_ioctl2,
 };
@@ -780,14 +793,34 @@ static const struct v4l2_ioctl_ops video_ioctl_ops =
 
 static struct video_device sc0710_video_template =
 {
-	.name                 = "sc0710-video",
-	.fops                 = &video_fops,
-	.ioctl_ops	      = &video_ioctl_ops,
+	.name      = "sc0710-video",
+	.fops      = &video_fops,
+	.ioctl_ops = &video_ioctl_ops,
 };
 
+static const struct v4l2_file_operations cobalt_empty_fops = {
+        .owner = THIS_MODULE,
+        .open = v4l2_fh_open,
+        .unlocked_ioctl = video_ioctl2,
+        .release = v4l2_fh_release,
+};
+
+static const struct v4l2_ioctl_ops cobalt_ioctl_empty_ops = {
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+        .vidioc_g_register              = cobalt_g_register,
+        .vidioc_s_register              = cobalt_s_register,
+#endif
+};
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static void sc0710_vid_timeout(unsigned long data)
 {
 	struct sc0710_dma_channel *ch = (struct sc0710_dma_channel *)data;
+#else
+static void sc0710_vid_timeout(struct timer_list *t)
+{
+	struct sc0710_dma_channel *ch = from_timer(ch, t, timeout);
+#endif
 	struct sc0710_dev *dev = ch->dev;
 	struct sc0710_buffer *buf;
 	unsigned long flags;
@@ -809,7 +842,11 @@ static void sc0710_vid_timeout(unsigned long data)
 
 		buf->vb.state = VIDEOBUF_DONE;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 		do_gettimeofday(&buf->vb.ts);
+#else
+		buf->vb.ts = ktime_get_ns();
+#endif
 		list_del(&buf->vb.queue);
 		wake_up(&buf->vb.done);
 	}
@@ -825,44 +862,64 @@ void sc0710_video_unregister(struct sc0710_dma_channel *ch)
 
 	dprintk(1, "%s()\n", __func__);
 
-	if (ch->v4l_device) {
-		if (video_is_registered(ch->v4l_device))
-			video_unregister_device(ch->v4l_device);
-		else
-			video_device_release(ch->v4l_device);
-
-		ch->v4l_device = NULL;
-	}
+	if (video_is_registered(&ch->vdev))
+		video_unregister_device(&ch->vdev);
+	else
+		video_device_release(&ch->vdev);
 }
 
 int sc0710_video_register(struct sc0710_dma_channel *ch)
 {
 	struct sc0710_dev *dev = ch->dev;
 	int err;
+	struct vb2_queue *q = &ch->vb2_queue;
+
+	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF | VB2_READ;
+	q->drv_priv = ch;
+	//q->buf_struct_size = sizeof(struct cobalt_buffer);
+	//q->ops = &cobalt_qops;
+	//q->mem_ops = &vb2_dma_sg_memops;
+	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	q->min_buffers_needed = 2;
+	q->lock = &ch->lock;
+	q->dev = &dev->pci->dev;
 
 	spin_lock_init(&ch->slock);
 
-	ch->v4l_device = video_device_alloc();
-	if (ch->v4l_device == NULL) {
-		printk(KERN_INFO "%s: can't init video device\n", dev->name);
-		return -1;
-	}
-	*ch->v4l_device = sc0710_video_template;
-	ch->v4l_device->lock = &ch->lock;
-	ch->v4l_device->release = video_device_release;
+	memcpy(&ch->vdev, &sc0710_video_template, sizeof(sc0710_video_template));
+	ch->vdev.lock = &ch->lock;
+	ch->vdev.release = video_device_release;
+	ch->vdev.vfl_dir = VFL_DIR_RX;
+	ch->vdev.queue = q;
+	ch->vdev.device_caps = V4L2_CAP_STREAMING | V4L2_CAP_READWRITE | V4L2_CAP_VIDEO_CAPTURE;
+	//ch->v4l_device->fops = &cobalt_empty_fops;
+	//ch->v4l_device->ioctl_ops = &cobalt_ioctl_empty_ops;
+	ch->vdev.v4l2_dev = &dev->v4l2_dev;
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
 	ch->v4l_device->parent = &dev->pci->dev;
-	strcpy(ch->v4l_device->name, "sc0710 video");
+#else
+	ch->vdev.dev_parent = &dev->pci->dev;
+#endif
+	strcpy(ch->vdev.name, "sc0710 video");
 
-	video_set_drvdata(ch->v4l_device, ch);
+	video_set_drvdata(&ch->vdev, ch);
 
-	err = video_register_device(ch->v4l_device, VFL_TYPE_GRABBER, -1);
+	err = video_register_device(&ch->vdev,
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
+		VFL_TYPE_GRABBER,
+#else
+		VFL_TYPE_VIDEO,
+#endif
+		-1);
 	if (err < 0) {
 		printk(KERN_INFO "%s: can't register video device\n", dev->name);
 		return -1;
 	}
 
 	printk(KERN_INFO "%s: registered device %s [v4l2]\n",
-	       dev->name, video_device_node_name(ch->v4l_device));
+	       dev->name, video_device_node_name(&ch->vdev));
 
 	return 0; /* Success */
 }

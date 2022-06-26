@@ -54,6 +54,8 @@ will emerge and users will not be expected to download this entire repo, with hu
 analyzer traces, random notes - just to use the driver.
 
 # Status
+* Jun 26 2022 - Forward port driver, fix broken APIs for use on Ubuntu 22.04. Basic video works on Ubuntu now.
+* Jun 26 2022 - Use tag e2908371f4c2b28ea613622815dcf2b4739d3bb7 for Centos 3.10 kernels. After this we're moving to Ubuntu 5.x kernels.
 * Feb 15 2021 - Detected colorimetry and colospace HDMI support.
 * Feb 15 2021 - Added basic DV Timing support to expose resolution / rate material through the v4l api.
 * Feb 14 2021 - Added audio support, PCM 16bit 48KHz.

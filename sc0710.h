@@ -42,6 +42,13 @@
 #include <media/v4l2-common.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
+#else
+#include <media/v4l2-device.h>
+#include <media/v4l2-fh.h>
+#include <media/videobuf2-v4l2.h>
+#include <media/videobuf2-dma-sg.h>
+#endif
 #include <media/tuner.h>
 #include <media/tveeprom.h>
 #include <media/videobuf-vmalloc.h>
@@ -100,7 +107,11 @@ struct sc0710_dev;
 
 struct sc0710_things_per_second
 {
-	struct timespec lastTime;
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,0,0)
+	struct old_timespec32 lastTime;
+#else
+	u64 lastTime;
+#endif
 	u64 persecond;
 	u64 accumulator;
 };
@@ -224,7 +235,8 @@ struct sc0710_dma_channel
 
 	/* Channel 0 */
 	/* V4L2 */
-	struct video_device         *v4l_device;
+	struct video_device          vdev;
+	struct vb2_queue             vb2_queue;
 	spinlock_t                   slock;
 
 	/* Buffering */
@@ -336,6 +348,9 @@ struct sc0710_dev {
 	s32                        contrast;
 	s32                        saturation;
 	s32                        hue;
+
+	/* V4L2 */
+	struct v4l2_device         v4l2_dev;
 };
 
 struct sc0710_fh

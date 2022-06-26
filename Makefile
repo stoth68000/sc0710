@@ -18,7 +18,8 @@ clean:
 load:	all
 	sudo dmesg -c >/dev/null
 	sudo cp /dev/null /var/log/debug
-	sudo modprobe videobuf2-core
+	#sudo modprobe videobuf2-core
+	sudo modprobe videobuf2-common
 	sudo modprobe videodev
 	#sudo modprobe videobuf-dma-sg
 	sudo modprobe videobuf-vmalloc
