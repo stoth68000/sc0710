@@ -183,12 +183,12 @@ int sc0710_i2c_read_hdmi_status(struct sc0710_dev *dev)
 		printk("%s ret = %d\n", __func__, ret);
 		return -1;
 	}
-
+#if 0
 	printk("%s    hdmi: ", dev->name);
 	for (i = 0; i < sizeof(rbuf); i++)
 		printk("%02x ", rbuf[i]);
 	printk("\n");
-
+#endif
 	if (rbuf[8]) {
 		dev->locked = 1;
 		
