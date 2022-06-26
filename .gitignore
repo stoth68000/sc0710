@@ -3,6 +3,10 @@ modules.order
 sc0710.ko
 sc0710.mod.c
 .sc0710.ko.cmd
+.Module.symvers.cmd
+.modules.order.cmd
+.sc0710.mod.cmd
+sc0710.mod
 *.o
 *.o.cmd
 .tmp_versions/
