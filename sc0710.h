@@ -98,9 +98,9 @@ struct sc0710_board {
 };
 
 struct sc0710_subid {
-	u16     subvendor;
-	u16     subdevice;
-	u32     card;
+	u16 subvendor;
+	u16 subdevice;
+	u32 card;
 };
 
 struct sc0710_dev;
@@ -120,18 +120,17 @@ struct sc0710_things_per_second
 struct sc0710_buffer
 {
 	/* common v4l buffer stuff -- must be first */
-	struct videobuf_buffer  vb;
+	struct videobuf_buffer vb;
 
 	/* sc0710 specific */
-	const struct sc0710_format   *fmt;
+	const struct sc0710_format *fmt;
 };
 
 struct sc0710_dmaqueue {
-	struct list_head       active;
-	struct list_head       queued;
-	struct timer_list      timeout;
-	//struct btcx_riscmem    stopper;
-	u32                    count;
+	struct list_head   active;
+	struct list_head   queued;
+	struct timer_list  timeout;
+	u32                count;
 };
 
 struct sc0710_dma_descriptor
@@ -173,13 +172,13 @@ enum sc0710_channel_state_e
  */
 struct sc0710_dma_descriptor_chain
 {
-	int         enabled;
-	int         total_transfer_size;
+	int enabled;
+	int total_transfer_size;
 
 	/* Multiple DMA allocations holding an entire video frame, or audio buffer. */
-	u32                          numAllocations;
+	u32 numAllocations;
 	struct sc0710_dma_descriptor_chain_allocation {
-                int                           enabled;
+        int                           enabled;
 		struct sc0710_dma_descriptor *desc;
 		u32                           buf_size; /* PCI allocation size in bytes, of each allocation */
 		u64                          *buf_cpu;  /* Virtual address */
@@ -191,7 +190,7 @@ struct sc0710_dma_descriptor_chain
 struct sc0710_dma_channel
 {
 	struct sc0710_dev           *dev;
-        u32                          nr;
+    u32                          nr;
 	u32                          enabled;
 	enum sc0710_channel_dir_e    direction;
 	enum sc0710_channel_type_e   mediatype;
@@ -299,7 +298,7 @@ struct sc0710_audio_dev
 };
 
 struct sc0710_dev {
-	struct list_head devlist;
+	struct list_head           devlist;
 
 	atomic_t                   refcount;
 
@@ -443,5 +442,3 @@ int  sc0710_audio_register(struct sc0710_dev *dev);
 void sc0710_audio_unregister(struct sc0710_dev *dev);
 int  sc0710_audio_deliver_samples(struct sc0710_dev *dev, struct sc0710_dma_channel *ch,
         const u8 *buf, int bitdepth, int strideBytes, int channels, int samplesPerChannel);
-
-
