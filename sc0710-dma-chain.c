@@ -105,7 +105,11 @@ void sc0710_dma_chain_free(struct sc0710_dma_channel *ch, int nr)
 	chain->enabled = 0;
 
 	for (i = 0; i < chain->numAllocations; i++) {
-		pci_free_consistent(dev->pci, dca->buf_size, dca->buf_cpu, dca->buf_dma);
+        #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+        dma_free_coherent(&((struct pci_dev *)dev->pci)->dev,  dca->buf_size, dca->buf_cpu, dca->buf_dma);
+        #else
+        pci_free_consistent(dev->pci, dca->buf_size, dca->buf_cpu, dca->buf_dma);
+        #endif
 		dca++;
 	}
 }
@@ -136,7 +140,11 @@ int sc0710_dma_chain_alloc(struct sc0710_dma_channel *ch, int nr, int total_tran
 
 		dca->enabled = 1;
 		dca->buf_size = size;
-		dca->buf_cpu = pci_alloc_consistent(dev->pci, dca->buf_size, &dca->buf_dma);
+        #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+        dca->buf_cpu = dma_alloc_coherent(&((struct pci_dev *)dev->pci)->dev, dca->buf_size, &dca->buf_dma, GFP_ATOMIC);
+        #else
+        dca->buf_cpu = pci_alloc_consistent(dev->pci, dca->buf_size, &dca->buf_dma);
+        #endif
 		if (dca->buf_cpu == 0)
 			return -1;
 
